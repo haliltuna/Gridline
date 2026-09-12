@@ -1,0 +1,189 @@
+{
+  "theme": "dark",
+  "archetype": "ARCHETYPE 4: SWISS & HIGH-CONTRAST + THE PERFORMANCE PRO (Dark Technical Readout / Blueprint Command Center)",
+  "design_intent": "Gridline is an AI-powered takeoff and estimation engine for commercial and multi-family flooring subcontractors. The visual direction is a high-contrast dark technical-readout aesthetic: deep obsidian/slate backgrounds, electric high-visibility neon-yellow (#E2F952 / #D8FA28) glow accents, technical blueprint gridlines (subtle 1px cyan/slate grid overlays), crisp hairline borders, and ultra-readable high-contrast typography designed specifically for clarity and ease of use by older-age contractors and estimator pros.",
+  "colors": {
+    "accent": "#E2F952",
+    "on_accent": "#090D11",
+    "accent_hover": "#F0FE82",
+    "accent_subtle": "rgba(226, 249, 82, 0.12)",
+    "accent_border": "rgba(226, 249, 82, 0.35)",
+    "surfaces": [
+      {
+        "name": "page",
+        "kind": "solid",
+        "bg": "#090D12",
+        "on_bg": "#F1F5F9",
+        "on_bg_muted": "#94A3B8",
+        "roles": {
+          "link": "#E2F952",
+          "hover_link": "#F0FE82",
+          "error": "#F87171",
+          "success": "#4ADE80",
+          "warning": "#FBBF24",
+          "info": "#38BDF8"
+        }
+      },
+      {
+        "name": "panel",
+        "kind": "solid",
+        "bg": "#0F1722",
+        "on_bg": "#F8FAFC",
+        "on_bg_muted": "#94A3B8",
+        "roles": {
+          "border": "#1E293B",
+          "border_highlight": "rgba(226, 249, 82, 0.3)",
+          "active_row": "#162232"
+        }
+      },
+      {
+        "name": "card_subtle",
+        "kind": "solid",
+        "bg": "#131D2A",
+        "on_bg": "#FFFFFF",
+        "on_bg_muted": "#A0ABBA",
+        "roles": {
+          "border": "#223145",
+          "badge_bg": "#1A2636"
+        }
+      },
+      {
+        "name": "hero",
+        "kind": "image",
+        "contrast_against": "#0B1017",
+        "guarantee": "scrim: linear-gradient(180deg, rgba(9,13,18,0.88) 0%, rgba(9,13,18,0.95) 60%, #090D12 100%)",
+        "on_bg": "#FFFFFF",
+        "on_bg_muted": "#CBD5E1",
+        "roles": {
+          "link": "#E2F952",
+          "error": "#F87171",
+          "success": "#4ADE80"
+        }
+      },
+      {
+        "name": "glass_header",
+        "kind": "glass",
+        "contrast_against": "#090D12",
+        "guarantee": "backdrop-blur-xl bg-[#090D12]/85 border-b border-[#1E293B]/80",
+        "on_bg": "#F8FAFC",
+        "on_bg_muted": "#94A3B8"
+      },
+      {
+        "name": "badge_neon",
+        "kind": "solid",
+        "bg": "#1C2712",
+        "on_bg": "#E2F952",
+        "on_bg_muted": "#C2DC35"
+      },
+      {
+        "name": "badge_alert",
+        "kind": "solid",
+        "bg": "#3B1818",
+        "on_bg": "#FCA5A5",
+        "on_bg_muted": "#F87171"
+      },
+      {
+        "name": "table_header",
+        "kind": "solid",
+        "bg": "#0D141E",
+        "on_bg": "#E2E8F0",
+        "on_bg_muted": "#94A3B8"
+      }
+    ]
+  },
+  "typography": {
+    "font_family_heading": "'Space Grotesk Variable', sans-serif",
+    "font_family_sans": "'DM Sans Variable', sans-serif",
+    "font_family_mono": "'JetBrains Mono Variable', monospace",
+    "scale_px": {
+      "display": 56,
+      "h1": 44,
+      "h2": 32,
+      "h3": 22,
+      "body": 16,
+      "caption": 14
+    },
+    "rules": {
+      "headings": "font-bold tracking-tight text-slate-100 font-heading",
+      "data_readout": "font-mono font-semibold tracking-tight text-white",
+      "overlines": "text-xs font-mono uppercase tracking-[0.2em] text-[#E2F952]",
+      "body": "text-base leading-relaxed text-slate-300 font-sans",
+      "senior_contractor_friendly": "Never use text smaller than 14px for core numbers or inputs. Use high-contrast font weights (600/700) for numeric totals and square footage metrics."
+    }
+  },
+  "entry_surfaces": {
+    "/": "split hero with technical blueprint grid — value proposition + primary CTA left, interactive live takeoff preview & spec calculator right",
+    "/login": "branded split auth — system mission + technical readout preview left, login credentials form right",
+    "/signup": "branded split auth — system mission + tier selection helper left, registration form right",
+    "/dashboard": "command center header + live summary KPI metrics banner + multi-building job list table with status badges and quick takeoff trigger",
+    "/upload": "technical blueprint dropzone with drag-and-drop, PDF multi-page stack support (100+ pages), and real-time Opus AI extraction progress stepper",
+    "/takeoffs/:id": "high-density hierarchical takeoff workspace grouped by Building and Unit, tap-to-edit line items (flooring type, sqft, waste %, adhesive, labor, cost), AI flag banner, discount & tax bar, and quote/invoice converter",
+    "/invoices": "invoicing ledger with quote-to-invoice status, email dispatch status, Pay Now Stripe link generator, and change-order revision log",
+    "/profit": "monthly profit summary comparing paid invoices against job expense logs with profit margin metrics and Recharts breakdown",
+    "/billing": "three-tier subscription & pay-per-job matrix ($39 Single Job, $99 5-Job Pack, $999/mo Unlimited Pro) with Stripe portal integration",
+    "/settings": "tax jurisdiction auto-detector (GST/HST/PST/VAT/Sales Tax) + editable regional overrides, default labor rates, and waste % presets"
+  },
+  "visual_enhancers": {
+    "blueprint_grid_bg": "bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:24px_24px]",
+    "technical_borders": "border border-slate-800/80 hover:border-slate-700 transition-colors",
+    "hairline_neon_focus": "focus-visible:ring-2 focus-visible:ring-[#E2F952] focus-visible:ring-offset-2 focus-visible:ring-offset-[#090D12]",
+    "neon_glow_card": "relative before:absolute before:inset-0 before:-z-10 before:rounded-xl before:bg-[#E2F952]/5 before:blur-xl",
+    "terminal_pill": "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono bg-[#1C2712] text-[#E2F952] border border-[#E2F952]/30"
+  },
+  "motion": {
+    "principles": "Snappy, deterministic transitions that feel like precision engineering tools. Fast micro-interactions (150ms-200ms) with zero sluggishness.",
+    "hover_transitions": "transition-all duration-150 ease-out",
+    "sheet_dialog_transitions": "duration-200 ease-out",
+    "data_table_edit_flash": "highlight updated cells with a quick 400ms neon glow flash to confirm saved state",
+    "respect_reduced_motion": "Wrap non-essential layout shifts with motion/react checking prefers-reduced-motion"
+  },
+  "accessibility": {
+    "contrast_check": "All text tokens meet APCA / WCAG AA 4.5:1 minimum on their respective dark slate/obsidian backgrounds (#090D12, #0F1722, #131D2A).",
+    "hit_targets": "Minimum 44px tap target on all interactive table cells, buttons, filter chips, and dialog actions for ease of use in field/tablet/desktop conditions.",
+    "keyboard_navigation": "Full arrow and tab navigation through editable takeoff spreadsheet cells with Enter to commit and Escape to cancel.",
+    "focus_rings": "High-visibility 2px neon yellow (#E2F952) focus indicators."
+  },
+  "component_structure": {
+    "navbar": "frontend/src/components/layout/Navbar.tsx (Logo with blueprint crosshairs icon, links to Dashboard, Takeoffs, Invoices, Expenses & Profit, Settings, Billing, User profile, and New Upload CTA)",
+    "sidebar_or_shell": "frontend/src/components/layout/AppShell.tsx (Clean persistent topbar + optional collapsible tool drawer)",
+    "blueprint_uploader": "frontend/src/components/takeoff/BlueprintUploader.tsx (Drag-and-drop zone, page count detection, multi-page Opus engine scanner simulation with real-time status: Printed Scale OCR, Room Dimensions, 12 Floor Types Classification, Waste Calculation, Adhesive Matching, Flagging Blurry Areas)",
+    "takeoff_table": "frontend/src/components/takeoff/TakeoffTable.tsx (Grouped accordion by Building > Unit, inline tap-to-edit fields for Floor Type, Area sqft, Waste %, Adhesive, Labor hrs/rate, Line Total, AI Confidence badge, Add Line Item, Add Unit, Add Building)",
+    "quote_invoice_modal": "frontend/src/components/invoicing/QuoteInvoiceModal.tsx (Tax auto-applied from settings, editable discount %, client email field, Stripe Pay Now link generator, PDF print preview)",
+    "change_order_drawer": "frontend/src/components/invoicing/ChangeOrderDrawer.tsx (Revision history keeper v1.0 -> v1.1 -> v2.0 without destroying historical baseline)",
+    "tax_detector_widget": "frontend/src/components/settings/TaxDetectorWidget.tsx (Auto-detects country/province/state tax like GST 5% + PST 7% or US state sales tax, editable toggle)",
+    "profit_summary_chart": "frontend/src/components/profit/ProfitSummaryChart.tsx (Recharts monthly revenue vs material/labor expenses with gross profit and margin %)",
+    "pricing_tiers": "frontend/src/components/billing/PricingCards.tsx ($39 Single Job, $99 5-Job Pack, $999/mo Unlimited Pro with 14-day trial)"
+  },
+  "image_urls": {
+    "blueprint_hero": {
+      "url": "https://images.unsplash.com/photo-1603901622056-0a5bee231395?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzN8MHwxfHNlYXJjaHwzfHxjb21tZXJjaWFsJTIwYmx1ZXByaW50JTIwYXJjaGl0ZWN0dXJlfGVufDB8fHx8MTc4OTIzNDcxMHww&ixlib=rb-4.1.0&q=85",
+      "alt": "Architectural blueprints with drafting tools on technical workspace",
+      "category": "hero_background_and_landing"
+    },
+    "commercial_hallway_flooring": {
+      "url": "https://images.unsplash.com/photo-1497366216548-37526070297c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDJ8MHwxfHNlYXJjaHw0fHxjb21tZXJjaWFsJTIwZmxvb3JpbmclMjBpbnN0YWxsYXRpb258ZW58MHx8fHwxNzg5MjM0NzEwfDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Finished commercial flooring installation in sleek corporate hallway",
+      "category": "features_showcase"
+    },
+    "flooring_crew_installation": {
+      "url": "https://images.unsplash.com/photo-1772300164438-f73307d3b645?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDJ8MHwxfHNlYXJjaHwxfHxjb21tZXJjaWFsJTIwZmxvb3JpbmclMjBpbnN0YWxsYXRpb258ZW58MHx8fHwxNzg5MjM0NzEwfDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Commercial subcontractors installing high-spec flooring in large multi-unit space",
+      "category": "about_and_workflow"
+    },
+    "blueprint_detail_drafting": {
+      "url": "https://images.unsplash.com/photo-1762146828422-50a8bd416d3c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzN8MHwxfHNlYXJjaHwyfHxjb21tZXJjaWFsJTIwYmx1ZXByaW50JTIwYXJjaGl0ZWN0dXJlfGVufDB8fHx8MTc4OTIzNDcxMHww&ixlib=rb-4.1.0&q=85",
+      "alt": "Detailed architectural plan sheets with multi-room layout schematics",
+      "category": "takeoff_preview_mockup"
+    }
+  },
+  "instructions_to_main_agent": [
+    "1. Setup CSS Theming: Update `frontend/src/index.css` to import `@fontsource-variable/space-grotesk` for headings and `@fontsource-variable/dm-sans` for sans, plus `@fontsource-variable/jetbrains-mono` for mono. Ensure `dark` mode is enabled by default with dark background #090D12 and neon accent #E2F952.",
+    "2. Build Navigation & Core Pages: Implement Landing Page (`/`), Dashboard (`/dashboard`), Upload (`/upload`), Takeoff View (`/takeoffs/:id`), Invoices & Quotes (`/invoices`), Profit Summary & Expenses (`/profit`), Billing (`/billing`), Settings (`/settings`), Login (`/login`), and Register (`/register`).",
+    "3. Implement AI Reading Engine Experience: Build an interactive blueprint upload simulation supporting single & 100+ page blueprints. Include the Claude Opus extraction pipeline stages: Step 1 (Record printed scale & written room dimensions, prioritizing text over visual estimates), Step 2 (Calculate sqft, 12 floor types, waste factors 5%-15%, adhesive recommendations for subfloor type, and labor cost), Step 3 (Cross-check room total vs building stated total and flag unreadable/blurry rooms for manual contractor review).",
+    "4. Implement Editable Takeoff Table: Enable full tap-to-edit inline modifications on square footage, floor type (LVP, VCT, Carpet Tile, Broadloom, Ceramic Tile, Epoxy, Hardwood, Sheet Vinyl, Rubber, Terrazzo, Laminate, Polished Concrete), waste %, adhesive type, and labor hours. Provide instant auto-recalculation of totals and tax.",
+    "5. Invoicing & Change Order Flow: Add 'Convert to Quote' with discount % & auto-detected tax rates (GST, HST, PST, VAT, State Sales Tax). Add Stripe 'Pay Now' mock/action, email quote delivery, and revision-safe Change Orders (v1.0 -> v1.1) that retain full audit trails without deleting history.",
+    "6. Expense Log & Monthly Profit: Provide interactive expense entries (materials, adhesive, labor payouts, haul away) that reconcile automatically against paid invoices into a monthly profit summary chart.",
+    "7. Three-Tier Pricing Matrix: Implement Single Job ($39), 5-Job Pack ($99), and Unlimited Pro ($999/mo with 14-day free trial) with clean checkout trigger.",
+    "8. Testing Attributes: Ensure all buttons, inputs, links, tabs, and key summary values have `data-testid` attributes for complete testing agent coverage."
+  ]
+}

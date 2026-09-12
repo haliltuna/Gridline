@@ -1,0 +1,74 @@
+{
+  "iteration": 1,
+  "summary": "Verified the SameSite=None/Secure cookie fix for cross-site-iframe login (the reported bug) plus the full acceptance matrix for Gridline. All 8 criteria exercised: 7 browser checks + 1 backend test file (auth/session), all passing after selector/timing fixes made during this run. No application bugs found.",
+  "passed": 8,
+  "failed": 0,
+  "bugs": [],
+  "action_items": [],
+  "retest_needed": false,
+  "checks": [
+    {
+      "criterion": "Sign in works from a normal top-level page load",
+      "name": "login-top-level-dashboard",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Clicked login-submit-button at /login (top-level), reached /dashboard: job-list visible, 3 job-card-* elements, shell-user-email = demo@gridline.app. No bounce back to login."
+    },
+    {
+      "criterion": "THE REPORTED BUG: sign in works inside a cross-site iframe",
+      "name": "login-cross-site-iframe",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Loaded https://example.com top-level, injected <iframe src='https://blueprint-takeoff-9.preview.emergentagent.com/login'> (https APP_URL used to avoid unrelated mixed-content blocking of a http iframe under a https top page), clicked login-submit-button inside the frame: job-list rendered inside frame (screenshot confirms Jobs dashboard with 3 seeded jobs), then navigated in-frame to Invoices and Settings -- login-form never reappeared, settings-country-select rendered. Confirms the SameSite=None; Secure cookie fix (backend/lib/auth.py) resolves the original 'stuck at sign-in in iframe' bug. Backend cross-check: curl -i POST /api/auth/login shows 'set-cookie: gl_session=...; SameSite=none; Secure'."
+    },
+    {
+      "criterion": "Session survives reload and direct deep links",
+      "name": "session-survives-reload-and-deeplinks",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "After login, full reload of /dashboard kept job-list visible; direct goto('/invoices') rendered invoice-list; direct goto('/jobs/seed-job-oakridge') rendered takeoff-groups. login-form absent in all three."
+    },
+    {
+      "criterion": "Wrong password is rejected clearly and does not hang",
+      "name": "wrong-password-rejected",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Filled wrong password, submitted: stayed on /login, login-error text 'Wrong email or password' visible (plus a toast with the same text -- two separate elements, both correct). Retyped correct password and resubmitted successfully to job-list, proving the form stays usable for retry."
+    },
+    {
+      "criterion": "Wrong password / session behavior (API layer)",
+      "name": "test_tscheck_auth_session.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "3 pytest cases against live server (localhost:8001/api): (1) POST /auth/login 200, set-cookie contains 'samesite=none' and 'secure', and the returned cookie authenticates GET /auth/me 200 with matching email; (2) POST /auth/login with wrong password -> 401, no gl_session cookie set; (3) login -> /auth/me 200 -> POST /auth/logout 200 -> /auth/me 401 (session destroyed). All 3 passed: '3 passed, 4 warnings in 0.90s'."
+    },
+    {
+      "criterion": "Sign out ends the session for real",
+      "name": "signout-ends-session",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Logged in, clicked logout-button -> login-form visible. Direct goto('/dashboard') afterward re-redirected to login-form with job-list absent (count 0), i.e. no stale session/cached jobs shown."
+    },
+    {
+      "criterion": "Editable takeoff recalculates",
+      "name": "editable-takeoff-recalculates",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "On /jobs/seed-job-oakridge, clicked the first line-sqft-<id> cell (became a focused numeric input in place), set it to a value guaranteed different from its current displayed value (rerun-safe), blurred: line-cost-<id> for that row changed and totals-subtotal changed. Confirmed via screenshot showing updated sqft/cost/totals."
+    },
+    {
+      "criterion": "Quote -> change order -> invoice -> paid chain",
+      "name": "quote-invoice-paid-chain",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Approved all lines, clicked convert-to-quote-button/'Create change order' to add a new quote-row (count +1) with the immediately-prior row now reading 'superseded' (screenshot: Q-SEED-J-R3 draft, Q-SEED-J-R2 and Q-SEED-J-R1 both superseded and still listed -- history preserved, nothing deleted). On the newest quote: Email -> Mark accepted -> Create invoice produced an invoice on /invoices; clicking invoice-pay-<id> changed invoices-collected value (flips to paid)."
+    },
+    {
+      "criterion": "Tax auto-detect and expenses/profit",
+      "name": "tax-autodetect-and-expenses-profit",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "On /settings, selected Canada then Ontario: settings-tax-label-input auto-filled 'HST', settings-tax-rate-input auto-filled '13', both remained editable (typed 'HST (custom)'), Save settings persisted the custom label across a full page reload. On /expenses, logged a tscheck-vendor expense of 123.45 -> new expense-row appeared and the profit table (revenue/expenses/profit by month) updated with the new total."
+    }
+  ]
+}
