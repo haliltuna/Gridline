@@ -10,7 +10,13 @@ export interface User {
   plan: string;
   role: string;
   account_id: string | null;
+  picture?: string;
+  auth_provider?: string;
   created_at: string;
+}
+
+export interface GoogleSessionIn {
+  session_id: string;
 }
 
 export interface Settings {

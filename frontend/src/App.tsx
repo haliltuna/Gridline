@@ -1,4 +1,5 @@
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, useLocation } from "react-router-dom";
+import AuthCallback from "@/pages/AuthCallback";
 import { Toaster } from "@/components/ui/sonner";
 import Landing from "@/pages/Landing";
 import Login from "@/pages/Login";
@@ -18,6 +19,10 @@ import PaymentResult from "@/pages/PaymentResult";
 
 // One <Route> per page in src/pages; BrowserRouter already wraps this in main.tsx.
 export default function App() {
+  // Google sign-in lands on {origin}/dashboard#session_id=… — this must be checked during
+  // render (not in an effect) so the one-time id is exchanged before any guarded route runs.
+  const location = useLocation();
+  if (location.hash.includes("session_id=")) return <AuthCallback />;
   return (
     <>
       <Routes>

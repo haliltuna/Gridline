@@ -60,7 +60,8 @@ async def get_status_checks():
     status_checks = await db.status_checks.find().to_list(1000)
     return [StatusCheck(**status_check) for status_check in status_checks]
 
-from routers.auth import router as auth_router  # noqa: E402
+from routers.auth import router as auth_router
+from routers.google_auth import router as google_auth_router  # noqa: E402
 from routers.finance import router as finance_router
 from routers.payments import router as payments_router  # noqa: E402
 from routers.jobs import router as jobs_router  # noqa: E402
@@ -68,6 +69,7 @@ from routers.team import router as team_router  # noqa: E402
 from routers.tools import router as tools_router  # noqa: E402
 
 api_router.include_router(auth_router)
+api_router.include_router(google_auth_router)
 api_router.include_router(jobs_router)
 api_router.include_router(tools_router)
 api_router.include_router(team_router)

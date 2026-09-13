@@ -94,6 +94,29 @@ export default function Login() {
               <Label htmlFor="password" className="text-ink-2">Password</Label>
               <Input id="password" type="password" data-testid="login-password-input" value={password} onChange={(e) => setPassword(e.target.value)} required className="h-12 text-base" />
             </div>
+            <button
+              type="button"
+              data-testid="google-signin-button"
+              onClick={() => {
+                // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+                const redirectUrl = window.location.origin + "/dashboard";
+                window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+              }}
+              className="flex h-12 w-full items-center justify-center gap-3 border border-hairline bg-surface-2 font-semibold text-ink transition-colors hover:border-brand/60 hover:text-brand"
+            >
+              <svg className="h-5 w-5" viewBox="0 0 48 48" aria-hidden="true">
+                <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.8-6.8C35.6 2.3 30.2 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.2C12.4 13.4 17.7 9.5 24 9.5z" />
+                <path fill="#4285F4" d="M46.1 24.6c0-1.6-.1-2.8-.4-4.1H24v8.4h12.5c-.3 2.1-1.6 5.2-4.7 7.3l7.7 6c4.5-4.2 6.6-10.3 6.6-17.6z" />
+                <path fill="#FBBC05" d="M10.5 28.6A14.5 14.5 0 0 1 9.7 24c0-1.6.3-3.2.8-4.6l-7.9-6.2A24 24 0 0 0 0 24c0 3.9.9 7.5 2.6 10.8l7.9-6.2z" />
+                <path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.5-5.8l-7.7-6c-2.1 1.4-4.8 2.3-7.8 2.3-6.3 0-11.6-3.9-13.5-9.9l-7.9 6.2C6.5 42.6 14.6 48 24 48z" />
+              </svg>
+              Continue with Google
+            </button>
+            <div className="flex items-center gap-3">
+              <span className="h-px flex-1 bg-hairline" />
+              <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink-4">or use email</span>
+              <span className="h-px flex-1 bg-hairline" />
+            </div>
             <Button type="submit" size="lg" data-testid="login-submit-button" disabled={mut.isPending} className="w-full font-semibold">
               {mut.isPending ? "Working…" : mode === "signup" ? "Create account" : "Sign in"}
             </Button>

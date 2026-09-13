@@ -52,6 +52,7 @@ TAX_TABLE: dict[str, dict] = {
 # Pricing scope per line. A contractor bids the same room three different ways.
 SCOPES = {
     "supply_install": "Supply & Install",
+    "accessory": "Accessory (count x price)",
     "install_only": "Install Only (labor)",
     "supply_only": "Supply Only (material)",
     "misc": "Miscellaneous",
@@ -82,3 +83,18 @@ def detect_tax(country: str, region: str | None) -> tuple[str, float]:
     if region and region in entry["regions"]:
         return entry["regions"][region]
     return (entry["label"], entry["rate"])
+
+
+# Accessories the AI counts instead of measuring: door openings become transition strips,
+# stair treads become nosings. Each is priced per piece, with its own install minutes.
+ACCESSORIES: dict[str, dict] = {
+    "transition": {"label": "Transition strips (door openings)", "unit": "door",
+                   "unit_price": 18.0, "labor_hr_each": 0.2},
+    "nosing": {"label": "Stair nosings (steps)", "unit": "step",
+               "unit_price": 42.0, "labor_hr_each": 0.45},
+    "cove_base": {"label": "Cove base", "unit": "lf", "unit_price": 3.4, "labor_hr_each": 0.02},
+}
+
+
+def accessory_defaults(kind: str) -> dict:
+    return ACCESSORIES.get(kind, ACCESSORIES["transition"])

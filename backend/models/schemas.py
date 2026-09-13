@@ -22,6 +22,10 @@ class LoginIn(BaseModel):
     password: str
 
 
+class GoogleSessionIn(BaseModel):
+    session_id: str
+
+
 class User(BaseModel):
     id: str
     email: str
@@ -32,6 +36,8 @@ class User(BaseModel):
     account_id: str | None = None
     theme: str = "readout"
     page_credits: int = 0
+    picture: str = ""
+    auth_provider: str = "password"
     created_at: datetime
 
 

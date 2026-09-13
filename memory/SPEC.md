@@ -125,3 +125,16 @@ other when decided.
 
 ## Theming note (2026-09)
 `--color-base` was renamed to `--color-canvas` in index.css: it made Tailwind's `text-base` resolve to a near-black COLOR utility instead of a font size, which hid typed input text on dark themes. Use `bg-canvas` / `bg-canvas-2`; never re-add a `--color-base` token.
+
+## Auth (2026-09)
+Two paths into the same httpOnly `gl_session` cookie + `sessions` collection:
+1. email/password — `POST /api/auth/login` | `/api/auth/signup`
+2. Emergent-managed Google — `google-signin-button` on /login redirects to
+   auth.emergentagent.com with `redirect={window.location.origin}/dashboard` (never hardcoded),
+   returns to `#session_id=...`; App.tsx detects the hash during render and renders
+   `pages/AuthCallback.tsx`, which posts the id to `POST /api/auth/google/session`
+   (backend/routers/google_auth.py). That endpoint exchanges it server-side at
+   demobackend.emergentagent.com, upserts the user by email (owner
+   halilkocabiyikci@gmail.com lands on the `pro` plan, everyone else `trial`), stores the
+   returned 7-day session_token in `sessions` and sets the cookie.
+Test guidance: /app/auth_testing.md (seed a sessions row; OAuth itself is not scriptable).
