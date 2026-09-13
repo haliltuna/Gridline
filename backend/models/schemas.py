@@ -164,6 +164,7 @@ class Job(BaseModel):
     spec_brief: str = ""
     doors: int = 0
     steps: int = 0
+    cove_base_lf: float = 0.0
     index_stated: dict = {}
     index_variance: str = ""
     created_at: datetime = Field(default_factory=_now)
@@ -322,6 +323,19 @@ class QuoteIn(BaseModel):
     tax_rate: float | None = None
     tax_label: str | None = None
     notes: str = ""
+
+
+class DocLineUpdate(BaseModel):
+    """Retyping a line on a quote or invoice that is already out the door."""
+    room: str | None = None
+    product: str | None = None
+    sqft: float | None = None
+    qty: float | None = None
+    unit_price: float | None = None
+    material_cost_per_sqft: float | None = None
+    labor_hours: float | None = None
+    labor_rate: float | None = None
+    flat_cost: float | None = None
 
 
 class Quote(BaseModel):

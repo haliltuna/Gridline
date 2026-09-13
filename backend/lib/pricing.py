@@ -144,8 +144,14 @@ COMPETITORS = [
 ]
 
 
+# Plan ids that no longer exist in PLANS but may still be stored on old accounts.
+LEGACY_PLAN_IDS = {"agency": "pro", "starter": "crew", "unlimited": "pro"}
+
+
 def plan_for(plan_id: str | None) -> dict:
-    return BY_ID.get(plan_id or "", BY_ID[DEFAULT_PLAN])
+    key = plan_id or ""
+    key = LEGACY_PLAN_IDS.get(key, key)
+    return BY_ID.get(key, BY_ID[DEFAULT_PLAN])
 
 
 def has_cap(plan_id: str | None, cap: str) -> bool:

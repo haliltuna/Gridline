@@ -1,10 +1,12 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Send, CreditCard, FileText, Download } from "lucide-react";
-import { apiGet, apiPost } from "@/lib/api";
-import type { Invoice, SendOut } from "@/lib/types";
+import { Send, CreditCard, FileText, Download, Sliders } from "lucide-react";
+import { apiGet, apiPatch, apiPost } from "@/lib/api";
+import type { Invoice, SendOut, TakeoffLine } from "@/lib/types";
 import { money } from "@/lib/types";
 import Shell, { Panel, StatusBadge } from "@/components/Shell";
+import DocLineEditor, { type DocLinePatch } from "@/components/DocLineEditor";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +26,15 @@ export default function Invoices() {
   const pay = useMutation({
     mutationFn: (id: string) => apiPost<Invoice>(`/invoices/${id}/pay`),
     onSuccess: (inv) => { refresh(); toast.success(`${inv.number} marked paid`); },
+  });
+
+  // Retyping a product name or price on an invoice that is already out the door.
+  const [openLines, setOpenLines] = useState<string | null>(null);
+  const editLine = useMutation({
+    mutationFn: ({ id, lineId, patch }: { id: string; lineId: string; patch: DocLinePatch }) =>
+      apiPatch<Invoice>(`/invoices/${id}/lines/${lineId}`, patch),
+    onSuccess: (inv) => { refresh(); toast.success(`${inv.number} re-totalled — ${money(inv.total)}`); },
+    onError: () => toast.error("Could not change that invoice line"),
   });
 
   const rows = invoices.data ?? [];
@@ -79,7 +90,23 @@ export default function Invoices() {
                   <CreditCard className="h-4 w-4" /> Pay now
                 </Button>
               )}
+              <Button variant="ghost" data-testid={`invoice-edit-lines-${inv.id}`}
+                      onClick={() => setOpenLines(openLines === inv.id ? null : inv.id)}>
+                <Sliders className="h-4 w-4" /> {openLines === inv.id ? "Close lines" : "Edit lines"}
+              </Button>
             </div>
+            {openLines === inv.id && (
+              <div className="w-full">
+                <DocLineEditor
+                  testId={`invoice-lines-${inv.id}`}
+                  lines={inv.lines as unknown as TakeoffLine[]}
+                  pending={editLine.isPending}
+                  readOnly={inv.status === "paid"}
+                  readOnlyNote="This invoice is paid — raise a change order on the job instead of editing it."
+                  onSave={(lineId, patch) => editLine.mutate({ id: inv.id, lineId, patch })}
+                />
+              </div>
+            )}
           </div>
         ))}
       </div>

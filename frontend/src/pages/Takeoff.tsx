@@ -15,6 +15,7 @@ import type {
 import { FLOOR_TYPES, SCOPE_LABELS, SCOPE_SHORT, money, num } from "@/lib/types";
 import { useAuth } from "@/hooks/useAuth";
 import Shell, { Panel, StatusBadge } from "@/components/Shell";
+import DocLineEditor, { type DocLinePatch } from "@/components/DocLineEditor";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -120,6 +121,14 @@ export default function Takeoff() {
     onSuccess: (q) => { refresh(); toast.success(`Quote ${q.number} created (revision ${q.revision})`); },
     onError: (e) => fail(e, "Add and approve some lines first"),
   });
+  const [editQuoteId, setEditQuoteId] = useState<string | null>(null);
+  const editQuoteLine = useMutation({
+    mutationFn: ({ quoteId, lineId, patch }: { quoteId: string; lineId: string; patch: DocLinePatch }) =>
+      apiPatch<Quote>(`/quotes/${quoteId}/lines/${lineId}`, patch),
+    onSuccess: (q) => { refresh(); toast.success(`${q.number} re-totalled — ${money(q.total)}`); },
+    onError: (e) => fail(e, "Could not change that quote line"),
+  });
+
   const sendQuote = useMutation({
     mutationFn: (id: string) => apiPost<SendOut>(`/quotes/${id}/send`),
     onSuccess: (r) => { refresh(); toast.success(r.message); },
@@ -707,9 +716,27 @@ export default function Takeoff() {
                       {q.status === "accepted" && (
                         <Button size="sm" data-testid={`quote-invoice-${q.id}`} onClick={() => toInvoice.mutate(q.id)}>Create invoice</Button>
                       )}
+                      <Button
+                        size="sm" variant="ghost" data-testid={`quote-edit-lines-${q.id}`}
+                        onClick={() => setEditQuoteId(editQuoteId === q.id ? null : q.id)}
+                      >
+                        <Sliders className="h-3.5 w-3.5" /> {editQuoteId === q.id ? "Close lines" : "Edit lines"}
+                      </Button>
                     </>
                   )}
                 </div>
+                {editQuoteId === q.id && (
+                  <div className="w-full">
+                    <DocLineEditor
+                      testId={`quote-lines-${q.id}`}
+                      lines={q.lines as unknown as TakeoffLine[]}
+                      pending={editQuoteLine.isPending}
+                      readOnly={q.status === "superseded"}
+                      readOnlyNote="This revision is superseded and kept as history — edit the current revision instead."
+                      onSave={(lineId, patch) => editQuoteLine.mutate({ quoteId: q.id, lineId, patch })}
+                    />
+                  </div>
+                )}
               </div>
             ))}
           </div>

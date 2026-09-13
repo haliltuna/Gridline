@@ -161,3 +161,17 @@ Test guidance: /app/auth_testing.md (seed a sessions row; OAuth itself is not sc
   Parallax, DepthSection and CountUp — all reduced-motion aware. Landing.tsx uses them for the
   parallax hero grid/readout, count-up stats and depth on the stats/ROI blocks.
 - **Top bar** shows the Google avatar (`shell-user-avatar`) or initials plus the display name.
+
+## Quote/invoice line editing & cove base (2026-09)
+- `PATCH /api/quotes/{quote_id}/lines/{line_id}` and `PATCH /api/invoices/{invoice_id}/lines/{line_id}`
+  (`DocLineUpdate`) retype the product name and any price/qty/hours on the DOCUMENT snapshot and
+  re-total it with the discount % and tax % the document was built with (`_rate_from`).
+  Superseded quote revisions and paid invoices are read-only (400) so history stays intact.
+  UI: `components/DocLineEditor.tsx`, opened by `quote-edit-lines-{id}` on the takeoff and
+  `invoice-edit-lines-{id}` on the Invoices page.
+- Cove base: the AI now reports `cove_base_lf` per unit (room perimeter minus door openings) and
+  `build_accessory_lines()` prices it from `ACCESSORIES["cove_base"]` ($3.40/lf, 0.02 hr/lf)
+  exactly like transitions and nosings.
+- Plan-id migration: the removed `agency` tier is aliased to `pro` in
+  `lib/pricing.LEGACY_PLAN_IDS` and existing `agency` users were moved to `pro`, which restored
+  invoice/costing capabilities for the demo accounts.

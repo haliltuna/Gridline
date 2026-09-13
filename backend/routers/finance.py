@@ -22,7 +22,7 @@ from models.billing import (
     TopUpPack, Usage,
 )
 from models.schemas import (
-    CheckoutIn, CheckoutOut, DashboardStats, Expense, ExpenseIn, Invoice, JobCosting,
+    CheckoutIn, CheckoutOut, DashboardStats, DocLineUpdate, Expense, ExpenseIn, Invoice, JobCosting,
     Lead, LeadIn, MonthSummary, PayIntent, ProfitSummary, PublicInvoice,
     Quote, QuoteIn, SendOut, Settings, SettingsIn, TaxDetect,
 )
@@ -172,6 +172,65 @@ async def send_quote(quote_id: str, user: dict = Depends(require("quote:write"))
     return SendOut(ok=True, to=to, subject=f"Quote {q['number']} — {job.get('name', '')}",
                    mocked=not sent["delivered"],
                    message=f"Quote {q['number']} {note} ({to}).")
+
+
+def _rate_from(doc: dict) -> tuple[float, float]:
+    """Recover the discount % and tax % a document was built with, so a retyped line
+    re-totals exactly the way the original did."""
+    subtotal = float(doc.get("subtotal") or 0)
+    discount_amount = float(doc.get("discount_amount") or 0)
+    discount_pct = float(doc.get("discount_pct", discount_amount / subtotal * 100 if subtotal else 0))
+    taxable = subtotal - discount_amount
+    tax_rate = float(doc.get("tax_rate", float(doc.get("tax_amount") or 0) / taxable * 100 if taxable else 0))
+    return round(discount_pct, 4), round(tax_rate, 4)
+
+
+def _edit_doc_line(doc: dict, line_id: str, body: DocLineUpdate) -> dict:
+    lines = [dict(line) for line in doc.get("lines", [])]
+    target = next((line for line in lines if line.get("id") == line_id), None)
+    if target is None:
+        raise HTTPException(status_code=404, detail="That line is not on this document")
+    patch = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not patch:
+        raise HTTPException(status_code=400, detail="Nothing to change")
+    target.update(patch)
+    target["cost"] = line_cost(target)
+    discount_pct, tax_rate = _rate_from(doc)
+    totals = _totals(lines, discount_pct, tax_rate)
+    return {"lines": lines, **totals}
+
+
+@router.patch("/quotes/{quote_id}/lines/{line_id}", response_model=Quote)
+async def edit_quote_line(quote_id: str, line_id: str, body: DocLineUpdate,
+                          user: dict = Depends(require("quote:write"))):
+    """Retype a product name or price directly on a quote — even one already sent.
+
+    History is preserved: a superseded revision is read-only, so corrections always land on
+    the live revision and every earlier version keeps its own numbers.
+    """
+    q = await _quote_or_404(quote_id, account_id(user))
+    if q.get("status") == "superseded":
+        raise HTTPException(status_code=400, detail=(
+            "This revision has been superseded — edit the current revision instead."))
+    update = _edit_doc_line(q, line_id, body)
+    await db.quotes.update_one({"id": quote_id}, {"$set": update})
+    return Quote(**{**q, **update})
+
+
+@router.patch("/invoices/{invoice_id}/lines/{line_id}", response_model=Invoice)
+async def edit_invoice_line(invoice_id: str, line_id: str, body: DocLineUpdate,
+                            user: dict = Depends(require("invoice:write"))):
+    """Retype a product name or price on an unpaid invoice and re-total it."""
+    inv = await _invoice_or_404(invoice_id, account_id(user))
+    if inv.get("status") == "paid":
+        raise HTTPException(status_code=400, detail=(
+            "This invoice is paid — issue a change order instead of editing it."))
+    if not inv.get("lines"):
+        q = await db.quotes.find_one({"id": inv.get("quote_id")}, {"_id": 0}) or {}
+        inv["lines"] = q.get("lines", [])
+    update = _edit_doc_line(inv, line_id, body)
+    await db.invoices.update_one({"id": invoice_id}, {"$set": update})
+    return Invoice(**{**inv, **update})
 
 
 @router.post("/quotes/{quote_id}/accept", response_model=Quote)

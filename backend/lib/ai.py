@@ -41,6 +41,10 @@ Flooring bids are lost on the accessories, so COUNT them as well as measuring ar
  * doors: every door opening / doorway in the scope (each one needs a transition strip)
  * steps: every stair tread / step (each one needs a stair nosing)
  * stair_runs: number of separate stair runs
+ * cove_base_lf: linear feet of wall base / cove base — measure the room perimeter from the
+   printed dimensions and SUBTRACT the door openings (about 3 ft each). Only count rooms whose
+   finish gets a wall base (typically resilient, VCT and tile rooms, not carpeted bedrooms
+   unless the schedule says so).
 Report them per unit in "accessories" AND as project totals. Count what you can actually see;
 if a sheet is unreadable say so in flags instead of guessing.
 
@@ -59,7 +63,9 @@ Return STRICT JSON only, no prose, no markdown fence:
  "index_stated": {{"buildings": <int or null>, "units": <int or null>,
                   "total_sqft": <number or null>, "source": "sheet name/number or null"}},
  "doors": <int total door openings>, "steps": <int total stair treads>,
- "accessories": [{{"building":"Building A","unit":"Unit 101","doors":4,"steps":0,"note":null}}],
+ "cove_base_lf": <number, total linear feet of wall base>,
+ "accessories": [{{"building":"Building A","unit":"Unit 101","doors":4,"steps":0,
+                  "cove_base_lf":128.5,"note":null}}],
  "cross_check_note": "string or null",
  "flags": ["anything blurry/unreadable/assumed"],
  "brief": "2-3 sentence plain-English summary for the contractor",
@@ -196,8 +202,11 @@ def _fallback(filename: str, pages: int) -> dict[str, Any]:
         "index_stated": {"buildings": None, "units": None, "total_sqft": None, "source": None},
         "doors": 6,
         "steps": 0,
-        "accessories": [{"building": "Building A", "unit": "Unit 101", "doors": 4, "steps": 0, "note": None},
-                        {"building": "Building A", "unit": "Unit 102", "doors": 2, "steps": 0, "note": None}],
+        "cove_base_lf": 96.0,
+        "accessories": [{"building": "Building A", "unit": "Unit 101", "doors": 4, "steps": 0,
+                         "cove_base_lf": 64.0, "note": None},
+                        {"building": "Building A", "unit": "Unit 102", "doors": 2, "steps": 0,
+                         "cove_base_lf": 32.0, "note": None}],
         "cross_check_note": None,
         "specs": [],
         "flags": ["AI reader unavailable — starter takeoff generated. Verify every dimension before quoting."],
@@ -429,7 +438,8 @@ def build_accessory_lines(parsed: dict[str, Any], job_id: str, labor_rate: float
     """Turn the AI's door and step counts into priced transition / nosing lines."""
     groups = parsed.get("accessories") or []
     if not groups:
-        totals = {"doors": int(parsed.get("doors") or 0), "steps": int(parsed.get("steps") or 0)}
+        totals = {"doors": int(parsed.get("doors") or 0), "steps": int(parsed.get("steps") or 0),
+                  "cove_base_lf": float(parsed.get("cove_base_lf") or 0)}
         if not any(totals.values()):
             return []
         groups = [{"building": "Building A", "unit": "Whole job", **totals}]
@@ -438,7 +448,8 @@ def build_accessory_lines(parsed: dict[str, Any], job_id: str, labor_rate: float
         if not isinstance(g, dict):
             continue
         for kind, key, room in (("transition", "doors", "Transition strips — door openings"),
-                                ("nosing", "steps", "Stair nosings — steps")):
+                                ("nosing", "steps", "Stair nosings — steps"),
+                                ("cove_base", "cove_base_lf", "Cove base — wall linear feet")):
             qty = float(g.get(key) or 0)
             if qty <= 0:
                 continue
@@ -448,10 +459,11 @@ def build_accessory_lines(parsed: dict[str, Any], job_id: str, labor_rate: float
                 "unit": g.get("unit") or "Main",
                 "room": room,
                 "scope": "accessory",
-                "qty": qty,
+                "qty": round(qty, 2),
                 "unit_price": float(d["unit_price"]),
                 "labor_hours": round(qty * float(d["labor_hr_each"]), 2),
-                "source": f"counted from the drawings ({int(qty)} {d['unit']}s)",
+                "source": f"counted from the drawings ({qty:,.0f} {d['unit']}"
+                          + ("" if d["unit"] == "lf" else "s") + ")",
                 "review_note": g.get("note"),
             }, job_id, labor_rate))
     return out

@@ -295,6 +295,9 @@ export interface Invoice {
   tax_label: string;
   tax_amount: number;
   total: number;
+  lines: TakeoffLine[];
+  pay_token?: string;
+  payment_ref?: string;
   sent_at: string | null;
   paid_at: string | null;
   created_at: string;

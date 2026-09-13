@@ -192,6 +192,7 @@ async def upload_blueprint(job_id: str, file: UploadFile = File(...), user: dict
         "cross_check_note": result.get("cross_check_note"),
         "doors": int(result.get("doors") or sum(int(a.get("doors") or 0) for a in (result.get("accessories") or []) if isinstance(a, dict))),
         "steps": int(result.get("steps") or sum(int(a.get("steps") or 0) for a in (result.get("accessories") or []) if isinstance(a, dict))),
+        "cove_base_lf": float(result.get("cove_base_lf") or sum(float(a.get("cove_base_lf") or 0) for a in (result.get("accessories") or []) if isinstance(a, dict))),
         "index_stated": result.get("index_stated") or {},
         "index_variance": index_variance(
             result,
