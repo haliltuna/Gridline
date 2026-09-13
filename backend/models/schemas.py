@@ -362,6 +362,49 @@ class DocLineUpdate(BaseModel):
     flat_cost: float | None = None
 
 
+class Product(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    account_id: str
+    name: str
+    brand: str = ""
+    floor_type: str = ""
+    alternative: str = ""
+    cost_per_sqft: float = 0.0
+    note: str = ""
+    times_used: int = 0
+    last_used_at: datetime | None = None
+    created_at: datetime = Field(default_factory=_now)
+
+
+class ProductIn(BaseModel):
+    name: str
+    brand: str = ""
+    floor_type: str = ""
+    alternative: str = ""
+    cost_per_sqft: float = 0.0
+    note: str = ""
+
+
+class ApproveIn(BaseModel):
+    signed_by: str
+
+
+class ApprovalView(BaseModel):
+    number: str
+    revision: int
+    job_name: str
+    client_name: str
+    company_name: str
+    status: str
+    total: float
+    previous_total: float = 0.0
+    delta: float = 0.0
+    currency: str = "USD"
+    lines: list[dict] = []
+    signed_by: str = ""
+    signed_at: str = ""
+
+
 class Quote(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     job_id: str
@@ -379,6 +422,11 @@ class Quote(BaseModel):
     total: float = 0.0
     notes: str = ""
     lines: list[dict] = []
+    # Change-order e-sign: opaque token emailed to the client, plus the signature it collects
+    approve_token: str = ""
+    signature: dict = {}
+    change_order_from_total: float | None = None
+    change_order_lines: list[dict] = []
     created_at: datetime = Field(default_factory=_now)
 
 

@@ -45,17 +45,28 @@ $0.010 render/storage). Allowances are deliberately tight and there is **NO over
 when the pages are gone the upload is refused (402) with an upgrade prompt, so we never read
 pages we have not been paid for and the customer never gets a surprise charge.
 
-| Tier | Price | Pages | Jobs | Seats | Max PDF | COGS at full use | Capabilities |
-|---|---|---|---|---|---|---|---|
-| Trial (14 days) | free | 10 | 1 | 1 | 60 MB | $1.15 | takeoff, pdf, quote |
-| Single Job | $39 one-off | 25 total | 1 | 1 | 80 MB | $2.88 | takeoff, pdf ONLY |
-| Job Pack 5 | $99/mo | 60/mo | 5/mo | 2 | 120 MB | $6.90 | + quote, invoice, change orders |
-| Unlimited Pro | $999/mo (14-day trial) | unlimited | unlimited | 5 | 300 MB | usage-based | + costing, export, templates |
-| Enterprise | custom | pooled | unlimited | unlimited | 500 MB | negotiated | everything |
+| Tier | Price | Pages | Jobs | Seats | Max PDF | Capabilities |
+|---|---|---|---|---|---|---|
+| Trial (14 days) | free | 15 | 1 | 1 | 60 MB | takeoff ONLY (read-only results) |
+| Single Job | $49 one-off | 30 total | 1 | 1 | 80 MB | + edit_lines, pdf, quote (NO invoicing, NO spec sheet) |
+| Job Pack 5 | $99/mo annual ($1,188/yr, saves $360) or $129/mo monthly | 60/mo | 5/mo | 2 | 120 MB | + invoice, change_order |
+| Unlimited Pro | $259/mo annual ($3,108/yr, saves $840) or $329/mo monthly | unlimited | unlimited | 5 | 300 MB | + costing, export, templates, spec_sheet (exclusive) |
+| Enterprise | custom | pooled | unlimited | unlimited | 500 MB | everything + api |
+
+Billing cadence: annual = 12-month commitment billed monthly at the lower rate. Monthly cancels
+anytime free. Cancelling an annual plan early raises exactly ONE closing invoice =
+`early_exit_per_month` ($30 crew / $70 pro) x months already billed, then billing stops
+(GET /api/billing/cancel-preview, POST /api/billing/cancel; fee rows in `exit_invoices`).
+Terms copy is served by GET /api/billing/terms (`BILLING_TERMS`).
 
 Enforcement: routers/jobs.py counts the incoming PDF's pages with PyMuPDF BEFORE any AI call
-and refuses if `incoming > remaining`; capability gating (`_needs` in routers/finance.py)
-returns 402 with the upgrade message for quote/invoice/change order/costing/export.
+and refuses if `incoming > remaining`. Capability gating returns 402 with the upgrade message:
+`lib/plan_gate.needs_cap` on tools.py (spec sheet, unit templates, all PDF exports, change
+orders) and jobs.py (add/update/delete line, approve-all = `edit_lines`), plus `_needs` in
+finance.py (quote, invoice, change order, costing, export).
+Frontend gating reads capabilities from /api/billing/usage via `src/lib/plan.ts` (`usePlanCaps`)
+and hides/locks: takeoff & quote PDF links, spec-sheet upload (Upload + Takeoff pages),
+convert-to-quote and create-invoice buttons — each replaced by an upgrade link to /billing.
 Frontend surfaces this through `components/UsageMeter.tsx` (Upload page always, Dashboard when
 near/at the limit) and the 402 detail is shown verbatim in the upload error toast.
 GET /api/billing/usage now returns pages_remaining, limit_reached, near_limit.
@@ -210,3 +221,20 @@ Test guidance: /app/auth_testing.md (seed a sessions row; OAuth itself is not sc
   `customer.subscription.deleted` drops the account to `trial` with a note. `/payments/status`
   also marks a session expired when Stripe says so, so the result page never spins forever —
   it shows a distinct failed / expired card instead.
+
+## Product library & change-order e-sign (2026-09)
+- `products` collection (per account): `/api/products` GET(search q, floor_type) POST,
+  PATCH/DELETE `/api/products/{id}`, and `POST /api/products/{id}/apply/{line_id}` which drops
+  the name, approved alternative and the account's own cost per sq ft onto a takeoff line.
+  The library self-learns: `routers.products.remember_product()` upserts and bumps
+  `times_used` whenever a line's product is typed/changed, so results sort by what is quoted most.
+  UI: `/products` page (nav "Products") plus `components/ProductLibraryDialog.tsx` opened from the
+  `line-library-{id}` button on each takeoff row.
+- Change-order e-sign: `POST /api/quotes/{id}/change-order/send?against={id}` emails the client the
+  one-page change-order PDF with a link to `/approve/{approve_token}`. Public (no auth) routes
+  `GET|POST /api/approve/{token}` (routers/approvals.py) return the revision summary and record
+  `{name, at, ip}` into `quotes.signature`, setting the quote to accepted. Superseded revisions
+  cannot be signed. UI: `pages/Approve.tsx`, triggered from `change-order-send-button` in the
+  revision dialog.
+- EMAIL DELIVERY IS BLOCKED: backend/.env has no `RESEND_API_KEY`/`SENDER_EMAIL`, so mailer.send()
+  composes the message and returns delivered=false. Add the key + `resend>=2.0.0` to deliver.

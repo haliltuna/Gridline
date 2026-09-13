@@ -66,12 +66,16 @@ from routers.finance import router as finance_router
 from routers.payments import router as payments_router  # noqa: E402
 from routers.jobs import router as jobs_router  # noqa: E402
 from routers.team import router as team_router  # noqa: E402
+from routers.products import router as products_router
+from routers.approvals import router as approvals_router
 from routers.tools import router as tools_router  # noqa: E402
 
 api_router.include_router(auth_router)
 api_router.include_router(google_auth_router)
 api_router.include_router(jobs_router)
 api_router.include_router(tools_router)
+api_router.include_router(products_router)
+api_router.include_router(approvals_router)
 api_router.include_router(team_router)
 api_router.include_router(finance_router)
 api_router.include_router(payments_router)

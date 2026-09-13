@@ -161,6 +161,45 @@ export interface UnitTemplate {
   created_at: string;
 }
 
+export interface Product {
+  id: string;
+  account_id: string;
+  name: string;
+  brand: string;
+  floor_type: string;
+  alternative: string;
+  cost_per_sqft: number;
+  note: string;
+  times_used: number;
+  last_used_at: string | null;
+  created_at: string;
+}
+
+export interface ProductIn {
+  name: string;
+  brand: string;
+  floor_type: string;
+  alternative: string;
+  cost_per_sqft: number;
+  note: string;
+}
+
+export interface ApprovalView {
+  number: string;
+  revision: number;
+  job_name: string;
+  client_name: string;
+  company_name: string;
+  status: string;
+  total: number;
+  previous_total: number;
+  delta: number;
+  currency: string;
+  lines: Record<string, unknown>[];
+  signed_by: string;
+  signed_at: string;
+}
+
 export interface FieldChange {
   field: string;
   before: string;
@@ -420,6 +459,33 @@ export interface PlanTier {
   max_file_mb: number;
   overage_per_page: number;
   highlight: boolean;
+  annual_total: number;
+  annual_saving: number;
+  early_exit_per_month: number;
+}
+
+export interface BillingTerms {
+  default_cadence: string;
+  fine_print: string;
+  cancellation: string[];
+  retention: string;
+}
+
+export interface CancelPreview {
+  plan_id: string;
+  plan_name: string;
+  period: string;
+  months_billed: number;
+  per_month_difference: number;
+  exit_fee: number;
+  committed: boolean;
+  message: string;
+}
+
+export interface CancelOut {
+  ok: boolean;
+  exit_fee: number;
+  message: string;
 }
 
 export interface CostLine {

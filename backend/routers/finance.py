@@ -14,13 +14,13 @@ from lib.db import db
 from lib.flooring import TAX_TABLE, detect_tax
 from lib.pdf import quote_pdf
 from lib.pricing import (
-    CAP_CHANGE_ORDER, CAP_COSTING, CAP_EXPORT, CAP_INVOICE, CAP_QUOTE, COMPETITORS,
+    BILLING_TERMS, CAP_CHANGE_ORDER, CAP_COSTING, CAP_EXPORT, CAP_INVOICE, CAP_QUOTE, COMPETITORS,
     COST_BREAKDOWN, OVERAGE_PER_PAGE, PAGE_COST, PLANS as PLAN_DICTS, TARGET_MARGIN,
-    TOP_UPS, has_cap, plan_for, upgrade_message,
+    TOP_UPS, early_exit_invoice, has_cap, plan_for, upgrade_message,
 )
 from models.billing import (
-    CompetitorRow, CostLine, CostModel, CostingOverview, CostingRow, PlanTier, ThemeIn,
-    TopUpPack, Usage,
+    BillingTerms, CancelOut, CancelPreview, CompetitorRow, CostLine, CostModel, CostingOverview,
+    CostingRow, PlanTier, ThemeIn, TopUpPack, Usage,
 )
 from models.schemas import (
     CheckoutIn, CheckoutOut, DashboardStats, DocLineUpdate, Expense, ExpenseIn, Invoice, JobCosting,
@@ -652,6 +652,76 @@ def _trial_window(account: dict, plan: dict) -> dict:
     ends = started + timedelta(days=14)
     left = (ends - datetime.now(timezone.utc)).days
     return {"trial_days_left": max(0, left + 1), "trial_ends_on": ends.strftime("%d %b %Y")}
+
+
+@router.get("/billing/terms", response_model=BillingTerms)
+async def billing_terms():
+    """Commitment, cancellation and data-retention terms shown under the pricing toggle."""
+    return BillingTerms(**BILLING_TERMS)
+
+
+def _months_billed(account: dict) -> int:
+    started = account.get("plan_started_at") or account.get("created_at")
+    if isinstance(started, str):
+        started = datetime.fromisoformat(started.replace("Z", "+00:00"))
+    if not started:
+        return 1
+    if started.tzinfo is None:
+        started = started.replace(tzinfo=timezone.utc)
+    days = (datetime.now(timezone.utc) - started).days
+    return max(1, min(12, days // 30 + 1))
+
+
+async def _cancel_preview(user: dict) -> CancelPreview:
+    doc = await _account_doc(user)
+    plan = plan_for(doc.get("plan"))
+    period = doc.get("plan_period") or "annual"
+    committed = plan["kind"] == "subscription" and period == "annual"
+    months = _months_billed(doc) if committed else 0
+    fee = early_exit_invoice(plan["id"], months) if committed else 0.0
+    per_month = float(plan.get("early_exit_per_month") or 0)
+    if plan["kind"] != "subscription":
+        msg = f"{plan['name']} is not a subscription — there is nothing to cancel and no fee."
+    elif not committed:
+        msg = f"{plan['name']} is billed monthly with no commitment — cancel anytime, no fee."
+    else:
+        msg = (f"You are {months} month(s) into a 12-month annual commitment. Cancelling now raises one "
+               f"closing invoice of ${fee:,.2f} (${per_month:,.0f}/month x {months}), then billing stops "
+               f"completely — nothing is charged for the remaining months.")
+    return CancelPreview(plan_id=plan["id"], plan_name=plan["name"], period=period,
+                         months_billed=months, per_month_difference=per_month, exit_fee=fee,
+                         committed=committed, message=msg)
+
+
+@router.get("/billing/cancel-preview", response_model=CancelPreview)
+async def billing_cancel_preview(user: dict = Depends(require("billing:write"))):
+    return await _cancel_preview(user)
+
+
+@router.post("/billing/cancel", response_model=CancelOut)
+async def billing_cancel(user: dict = Depends(require("billing:write"))):
+    """Stop billing now. An annual commitment raises exactly one closing invoice first."""
+    pre = await _cancel_preview(user)
+    if pre.plan_id == "trial":
+        raise HTTPException(status_code=400, detail="You are on the free trial — there is nothing to cancel.")
+    acct = account_id(user)
+    if pre.exit_fee > 0:
+        await db.exit_invoices.insert_one({
+            "id": str(uuid.uuid4()), "user_id": acct, "plan_id": pre.plan_id,
+            "months_billed": pre.months_billed, "amount": pre.exit_fee,
+            "created_at": datetime.now(timezone.utc),
+        })
+    await db.users.update_one({"id": acct}, {"$set": {
+        "plan": "trial", "plan_period": "monthly", "plan_payment_state": "cancelled",
+        "plan_exit_fee": pre.exit_fee,
+        "plan_payment_note": (
+            f"Plan cancelled. Closing invoice of ${pre.exit_fee:,.2f} for the annual commitment."
+            if pre.exit_fee > 0 else "Plan cancelled — no fee. Your history stays exportable."),
+    }})
+    return CancelOut(ok=True, exit_fee=pre.exit_fee, message=(
+        f"Billing stopped. One closing invoice of ${pre.exit_fee:,.2f} covers the annual/monthly "
+        f"difference for the {pre.months_billed} month(s) already billed."
+        if pre.exit_fee > 0 else "Billing stopped immediately — no cancellation fee."))
 
 
 @router.get("/billing/top-ups", response_model=list[TopUpPack])

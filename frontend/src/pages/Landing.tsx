@@ -454,7 +454,7 @@ export default function Landing() {
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-brand">Pricing</p>
           <h2 className="mt-3 font-heading text-4xl font-bold tracking-tight text-ink">Pay per job, or go unlimited</h2>
           <div className="mt-8 inline-flex items-center gap-1 border border-hairline bg-surface p-1" data-testid="pricing-toggle">
-            {([["annual", "Annual · save 20%"], ["monthly", "Monthly"]] as const).map(([k, label]) => {
+            {([["annual", "Annual · save up to $840"], ["monthly", "Monthly"]] as const).map(([k, label]) => {
               const on = (k === "annual") === annual;
               return (
                 <button
@@ -501,7 +501,9 @@ export default function Landing() {
                   </div>
                   {sub && (
                     <p className="mt-2 font-mono text-xs text-ink-3" data-testid={`plan-${p.id}-cadence-note`}>
-                      {annual ? `billed annually · $${p.monthly_price}/mo month-to-month` : "month-to-month · switch to annual for 20% off"}
+                      {annual
+                        ? `billed monthly on a 12-month commitment · $${p.annual_total.toLocaleString()}/yr · saves $${p.annual_saving.toLocaleString()}/yr vs $${p.monthly_price}/mo`
+                        : `month-to-month, cancel anytime · annual drops it to $${p.price}/mo`}
                     </p>
                   )}
                   <p className="mt-3 text-[15px] text-ink-3">{p.blurb}</p>
@@ -544,6 +546,23 @@ export default function Landing() {
               </Reveal>
             );
           })}
+        </div>
+
+        {/* commitment terms */}
+        <div className="mt-10 border border-hairline/80 bg-surface p-7" data-testid="landing-billing-terms">
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-brand">Commitment & cancellation</p>
+          <ul className="mt-4 grid gap-3 md:grid-cols-2">
+            {[
+              "Monthly plans cancel anytime, no fee.",
+              "Annual plans are a 12-month commitment, billed monthly at the lower rate.",
+              "Cancel an annual plan early and you get exactly one closing invoice: $30/mo (Job Pack 5) or $70/mo (Unlimited Pro) for the months already billed.",
+              "Billing then stops completely — nothing is charged for the remaining months.",
+            ].map((t) => (
+              <li key={t} className="flex gap-2.5 text-[15px] text-ink-2">
+                <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand" />{t}
+              </li>
+            ))}
+          </ul>
         </div>
 
         {/* the pricing math, published */}

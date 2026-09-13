@@ -16,6 +16,8 @@ import Costing from "@/pages/Costing";
 import Leads from "@/pages/Leads";
 import LandingV2 from "@/pages/LandingV2";
 import PaymentResult from "@/pages/PaymentResult";
+import Products from "@/pages/Products";
+import Approve from "@/pages/Approve";
 
 // One <Route> per page in src/pages; BrowserRouter already wraps this in main.tsx.
 export default function App() {
@@ -44,6 +46,8 @@ export default function App() {
         <Route path="/payment/cancel" element={<PaymentResult cancelled />} />
         {/* Public: the client pays from an emailed link, with no Gridline account. */}
         <Route path="/pay/:payToken" element={<Pay />} />
+        <Route path="/products" element={<Products />} />
+        <Route path="/approve/:token" element={<Approve />} />
         <Route path="*" element={<Landing />} />
       </Routes>
       <Toaster richColors />

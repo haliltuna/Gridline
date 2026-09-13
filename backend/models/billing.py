@@ -42,6 +42,33 @@ class PlanTier(BaseModel):
     max_file_mb: int
     overage_per_page: float
     highlight: bool
+    annual_total: float = 0.0
+    annual_saving: float = 0.0
+    early_exit_per_month: float = 0.0
+
+
+class BillingTerms(BaseModel):
+    default_cadence: str
+    fine_print: str
+    cancellation: list[str]
+    retention: str
+
+
+class CancelPreview(BaseModel):
+    plan_id: str
+    plan_name: str
+    period: str
+    months_billed: int
+    per_month_difference: float
+    exit_fee: float
+    committed: bool
+    message: str
+
+
+class CancelOut(BaseModel):
+    ok: bool
+    exit_fee: float
+    message: str
 
 
 class CostLine(BaseModel):

@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Check, CreditCard, Gauge, ExternalLink } from "lucide-react";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
-import type { CheckoutOut, CheckoutSession, CostModel, PlanTier, TopUpPack, Usage, User } from "@/lib/types";
+import type { BillingTerms, CancelOut, CancelPreview, CheckoutOut, CheckoutSession, CostModel, PlanTier, TopUpPack, Usage, User } from "@/lib/types";
 import { money } from "@/lib/types";
 import Shell, { Panel } from "@/components/Shell";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,21 @@ export default function Billing() {
   const usage = useQuery<Usage>({ queryKey: ["usage"], queryFn: () => apiGet<Usage>("/billing/usage"), retry: false });
   const costs = useQuery<CostModel>({ queryKey: ["cost-model"], queryFn: () => apiGet<CostModel>("/billing/cost-model"), retry: false });
   const topUps = useQuery<TopUpPack[]>({ queryKey: ["top-ups"], queryFn: () => apiGet<TopUpPack[]>("/billing/top-ups"), retry: false });
+  const terms = useQuery<BillingTerms>({ queryKey: ["billing-terms"], queryFn: () => apiGet<BillingTerms>("/billing/terms"), retry: false });
+  const cancelPreview = useQuery<CancelPreview>({ queryKey: ["cancel-preview"], queryFn: () => apiGet<CancelPreview>("/billing/cancel-preview"), retry: false });
+  const cancelPlan = useMutation({
+    mutationFn: () => apiPost<CancelOut>("/billing/cancel", {}),
+    onSuccess: (r) => {
+      void qc.invalidateQueries({ queryKey: ["me"] });
+      void qc.invalidateQueries({ queryKey: ["usage"] });
+      void qc.invalidateQueries({ queryKey: ["cancel-preview"] });
+      toast.success(r.message);
+    },
+    onError: (e) => {
+      const detail = e instanceof ApiError ? (e.body as { detail?: string })?.detail : null;
+      toast.error(detail ?? "Could not cancel the plan");
+    },
+  });
 
   const checkout = useMutation({
     mutationFn: (planId: string) =>
@@ -131,7 +146,7 @@ export default function Billing() {
       <div className="mt-10 flex flex-wrap items-center justify-between gap-4">
         <h2 className="font-heading text-2xl font-semibold text-ink">Plans</h2>
         <div className="inline-flex items-center gap-1 border border-hairline bg-surface p-1" data-testid="billing-toggle">
-          {([["annual", "Annual · save 20%"], ["monthly", "Monthly"]] as const).map(([k, label]) => (
+          {([["annual", "Annual · save up to $840"], ["monthly", "Monthly"]] as const).map(([k, label]) => (
             <button
               key={k} type="button" data-testid={`billing-toggle-${k}`}
               onClick={() => setAnnual(k === "annual")}
@@ -172,6 +187,13 @@ export default function Billing() {
                   </>
                 )}
               </div>
+              {sub && (
+                <p className="mt-2 font-mono text-xs text-ink-3" data-testid={`billing-cadence-note-${p.id}`}>
+                  {annual
+                    ? `billed monthly on a 12-month commitment · $${p.annual_total.toLocaleString()}/yr · saves $${p.annual_saving.toLocaleString()}/yr`
+                    : `month-to-month, cancel anytime · annual drops it to $${p.price}/mo`}
+                </p>
+              )}
               <p className="mt-3 text-[15px] text-ink-3">{p.blurb}</p>
               <div className="mt-4 grid grid-cols-2 gap-3 border-y border-hairline py-4 font-mono text-sm">
                 <div>
@@ -217,6 +239,44 @@ export default function Billing() {
           );
         })}
       </div>
+
+      <Panel className="mt-10" testId="billing-terms">
+        <h2 className="font-heading text-xl font-semibold text-ink">Commitment & cancellation</h2>
+        <p className="mt-3 max-w-3xl text-[15px] leading-relaxed text-ink-3" data-testid="billing-fine-print">
+          {terms.data?.fine_print}
+        </p>
+        <ul className="mt-5 space-y-2" data-testid="billing-cancellation-terms">
+          {(terms.data?.cancellation ?? []).map((t) => (
+            <li key={t} className="flex gap-2.5 text-[15px] text-ink-2">
+              <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand" />{t}
+            </li>
+          ))}
+        </ul>
+        <p className="mt-5 max-w-3xl text-[15px] leading-relaxed text-ink-3" data-testid="billing-retention">
+          {terms.data?.retention}
+        </p>
+        {cancelPreview.data && (
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border border-hairline bg-surface-2 p-5">
+            <div className="max-w-2xl">
+              <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-ink-3">If you cancel today</div>
+              <p className="mt-2 text-[15px] text-ink-2" data-testid="cancel-preview-message">{cancelPreview.data.message}</p>
+            </div>
+            <div className="text-right">
+              <div className="font-mono text-3xl font-semibold text-brand" data-testid="cancel-exit-fee">
+                {money(cancelPreview.data.exit_fee)}
+              </div>
+              <Button
+                size="sm" variant="outline" className="mt-2 font-semibold"
+                data-testid="cancel-plan-button"
+                disabled={cancelPlan.isPending || cancelPreview.data.plan_id === "trial"}
+                onClick={() => cancelPlan.mutate()}
+              >
+                {cancelPreview.data.plan_id === "trial" ? "Nothing to cancel" : "Cancel plan"}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Panel>
 
       <Panel className="mt-10" data-testid="billing-topups">
         <h2 className="font-heading text-xl font-semibold text-ink">Page top-ups</h2>

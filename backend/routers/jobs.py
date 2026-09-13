@@ -3,11 +3,13 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
+from routers.products import remember_product
 from lib.ai import apply_specs_to_line, build_accessory_lines, build_line, index_variance, line_cost, read_blueprint
 from lib.authz import account_id, require
 from lib.db import db
 from lib.flooring import adhesive_gallons, defaults_for
-from lib.pricing import plan_for
+from lib.plan_gate import needs_cap
+from lib.pricing import CAP_EDIT, plan_for
 from models.billing import PageEstimate
 from models.schemas import Job, JobIn, LineCreate, LineUpdate, TakeoffLine
 
@@ -222,6 +224,7 @@ async def list_lines(job_id: str, user: dict = Depends(require("takeoff:read")))
 
 @router.post("/jobs/{job_id}/lines", response_model=TakeoffLine)
 async def add_line(job_id: str, body: LineCreate, user: dict = Depends(require("takeoff:write"))):
+    await needs_cap(user, CAP_EDIT)
     await _job_or_404(job_id, account_id(user))
     settings = await db.settings.find_one({"user_id": account_id(user)}, {"_id": 0}) or {}
     payload = body.model_dump()
@@ -240,6 +243,7 @@ async def add_line(job_id: str, body: LineCreate, user: dict = Depends(require("
 
 @router.patch("/lines/{line_id}", response_model=TakeoffLine)
 async def update_line(line_id: str, body: LineUpdate, user: dict = Depends(require("takeoff:write"))):
+    await needs_cap(user, CAP_EDIT)
     line = await db.takeoff_lines.find_one({"id": line_id}, {"_id": 0})
     if not line:
         raise HTTPException(status_code=404, detail="Line not found")
@@ -254,6 +258,8 @@ async def update_line(line_id: str, body: LineUpdate, user: dict = Depends(requi
         await db.takeoff_lines.update_one({"id": line_id}, {"$set": line})
         return _with_cost(line)
 
+    if patch.get("product"):
+        await remember_product(account_id(user), line)
     if line.get("scope") == "accessory":
         # Counted trim work: qty x unit price (+ its own install hours). No area or waste math.
         line.update({"floor_type": "", "sqft": 0.0, "waste_pct": 0.0, "adhesive": "",
@@ -289,6 +295,7 @@ async def update_line(line_id: str, body: LineUpdate, user: dict = Depends(requi
 
 @router.delete("/lines/{line_id}")
 async def delete_line(line_id: str, user: dict = Depends(require("takeoff:write"))):
+    await needs_cap(user, CAP_EDIT)
     line = await db.takeoff_lines.find_one({"id": line_id}, {"_id": 0})
     if not line:
         raise HTTPException(status_code=404, detail="Line not found")
@@ -299,6 +306,7 @@ async def delete_line(line_id: str, user: dict = Depends(require("takeoff:write"
 
 @router.post("/jobs/{job_id}/approve-all", response_model=list[TakeoffLine])
 async def approve_all(job_id: str, user: dict = Depends(require("takeoff:write"))):
+    await needs_cap(user, CAP_EDIT)
     await _job_or_404(job_id, account_id(user))
     await db.takeoff_lines.update_many({"job_id": job_id}, {"$set": {"approved": True}})
     docs = await db.takeoff_lines.find({"job_id": job_id}, {"_id": 0}).to_list(2000)

@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   AlertTriangle, Check, Plus, Trash2, FileSignature, Send, Ruler, ClipboardList,
-  Copy, GitCompare, FileDown, Sliders, Layers, Link2, Repeat,
+  Copy, GitCompare, FileDown, Sliders, Layers, Link2, Repeat, Lock,
 } from "lucide-react";
 import { apiDelete, apiGet, apiPatch, apiPost, ApiError } from "@/lib/api";
 import { uploadFile } from "@/lib/session";
@@ -14,8 +14,10 @@ import type {
 } from "@/lib/types";
 import { FLOOR_TYPES, SCOPE_LABELS, SCOPE_SHORT, money, num } from "@/lib/types";
 import { useAuth } from "@/hooks/useAuth";
+import { CAP, usePlanCaps } from "@/lib/plan";
 import Shell, { Panel, StatusBadge } from "@/components/Shell";
 import DocLineEditor, { type DocLinePatch } from "@/components/DocLineEditor";
+import ProductLibraryDialog from "@/components/ProductLibraryDialog";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -62,7 +64,12 @@ export default function Takeoff() {
   const { jobId = "" } = useParams();
   const qc = useQueryClient();
   const { user } = useAuth();
-  const canEdit = (user?.role ?? "owner") !== "viewer";
+  const { can, planName } = usePlanCaps();
+  const canEdit = (user?.role ?? "owner") !== "viewer" && can(CAP.edit);
+  const canPdf = can(CAP.pdf);
+  const canQuote = canEdit && can(CAP.quote);
+  const canInvoice = canEdit && can(CAP.invoice);
+  const canSpec = canEdit && can(CAP.spec);
 
   const [discount, setDiscount] = useState(0);
   const [taxRate, setTaxRate] = useState<number | null>(null);
@@ -127,6 +134,13 @@ export default function Takeoff() {
       apiPatch<Quote>(`/quotes/${quoteId}/lines/${lineId}`, patch),
     onSuccess: (q) => { refresh(); toast.success(`${q.number} re-totalled — ${money(q.total)}`); },
     onError: (e) => fail(e, "Could not change that quote line"),
+  });
+
+  const sendChangeOrder = useMutation({
+    mutationFn: ({ quoteId, against }: { quoteId: string; against: string }) =>
+      apiPost<SendOut>(`/quotes/${quoteId}/change-order/send?against=${against}`),
+    onSuccess: (r) => { refresh(); toast.success(r.message); },
+    onError: (e) => fail(e, "Could not email that change order"),
   });
 
   const sendQuote = useMutation({
@@ -224,13 +238,20 @@ export default function Takeoff() {
               ))}
             </SelectContent>
           </Select>
-          <a
-            href={pdfUrl(`/jobs/${jobId}/takeoff.pdf`)} target="_blank" rel="noreferrer"
-            data-testid="takeoff-pdf-button"
-            className={cn(buttonVariants({ variant: "outline" }), "gap-2")}
-          >
-            <FileDown className="h-4 w-4" /> Takeoff PDF
-          </a>
+          {canPdf ? (
+            <a
+              href={pdfUrl(`/jobs/${jobId}/takeoff.pdf`)} target="_blank" rel="noreferrer"
+              data-testid="takeoff-pdf-button"
+              className={cn(buttonVariants({ variant: "outline" }), "gap-2")}
+            >
+              <FileDown className="h-4 w-4" /> Takeoff PDF
+            </a>
+          ) : (
+            <Link to="/billing" data-testid="takeoff-pdf-locked"
+                  className={cn(buttonVariants({ variant: "outline" }), "gap-2 text-ink-3")}>
+              <Lock className="h-4 w-4" /> PDF export — upgrade
+            </Link>
+          )}
         </div>
       }
     >
@@ -313,7 +334,7 @@ export default function Takeoff() {
               </p>
               {job.data?.spec_brief && <p className="mt-2 text-sm text-ink-3">{job.data.spec_brief}</p>}
             </div>
-            {canEdit && (
+            {canSpec ? (
               <div className="flex shrink-0 gap-2">
                 <input ref={specRef} type="file" accept="application/pdf,.pdf" className="hidden"
                        data-testid="spec-file-input"
@@ -328,6 +349,11 @@ export default function Takeoff() {
                   </Button>
                 )}
               </div>
+            ) : (
+              <Link to="/billing" data-testid="spec-upload-locked"
+                    className={cn(buttonVariants({ variant: "outline" }), "shrink-0 gap-2 text-ink-3")}>
+                <Lock className="h-4 w-4" /> Spec-sheet reading is Unlimited Pro only
+              </Link>
             )}
           </div>
           {(job.data?.specs ?? []).length > 0 && (
@@ -479,6 +505,9 @@ export default function Takeoff() {
                             : l.scope !== "misc" && l.scope !== "accessory"
                               ? <div className="mt-0.5 font-mono text-[11px] text-amber-300" data-testid={`line-product-missing-${l.id}`}>no specified product — add the brand</div>
                               : null}
+                          {canEdit && l.scope !== "misc" && (
+                            <ProductLibraryDialog line={l} onApplied={refresh} />
+                          )}
                           {l.product_alt && canEdit && (
                             <button
                               type="button"
@@ -643,6 +672,16 @@ export default function Takeoff() {
                       </Select>
                     </div>
                     {diff.data && diffAgainst && (
+                      <Button
+                        size="sm" variant="ghost" data-testid="change-order-send-button"
+                        disabled={sendChangeOrder.isPending}
+                        onClick={() => sendChangeOrder.mutate({ quoteId: latest!.id, against: diffAgainst })}
+                      >
+                        <Send className="h-3.5 w-3.5" />
+                        {sendChangeOrder.isPending ? "Sending…" : "Email for e-sign"}
+                      </Button>
+                    )}
+                    {diff.data && diffAgainst && (
                       <a
                         href={pdfUrl(`/quotes/${latest!.id}/change-order.pdf?against=${diffAgainst}`)}
                         target="_blank" rel="noreferrer"
@@ -738,13 +777,15 @@ export default function Takeoff() {
                 <div className="font-mono text-lg font-semibold text-ink">{money(q.total)}</div>
                 <StatusBadge status={q.status} testId={`quote-status-${q.id}`} />
                 <div className="flex flex-wrap gap-2">
-                  <a
-                    href={pdfUrl(`/quotes/${q.id}/pdf`)} target="_blank" rel="noreferrer"
-                    data-testid={`quote-pdf-${q.id}`}
-                    className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "gap-2")}
-                  >
-                    <FileDown className="h-3.5 w-3.5" /> PDF
-                  </a>
+                  {canPdf && (
+                    <a
+                      href={pdfUrl(`/quotes/${q.id}/pdf`)} target="_blank" rel="noreferrer"
+                      data-testid={`quote-pdf-${q.id}`}
+                      className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "gap-2")}
+                    >
+                      <FileDown className="h-3.5 w-3.5" /> PDF
+                    </a>
+                  )}
                   {canEdit && (
                     <>
                       <Button size="sm" variant="outline" data-testid={`quote-send-${q.id}`} onClick={() => sendQuote.mutate(q.id)}>
@@ -753,9 +794,14 @@ export default function Takeoff() {
                       {q.status !== "accepted" && q.status !== "superseded" && (
                         <Button size="sm" variant="outline" data-testid={`quote-accept-${q.id}`} onClick={() => acceptQuote.mutate(q.id)}>Mark accepted</Button>
                       )}
-                      {q.status === "accepted" && (
+                      {q.status === "accepted" && (canInvoice ? (
                         <Button size="sm" data-testid={`quote-invoice-${q.id}`} onClick={() => toInvoice.mutate(q.id)}>Create invoice</Button>
-                      )}
+                      ) : (
+                        <Link to="/billing" data-testid={`quote-invoice-locked-${q.id}`}
+                              className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-2 text-ink-3")}>
+                          <Lock className="h-3.5 w-3.5" /> Invoicing — upgrade
+                        </Link>
+                      ))}
                       <Button
                         size="sm" variant="ghost" data-testid={`quote-edit-lines-${q.id}`}
                         onClick={() => setEditQuoteId(editQuoteId === q.id ? null : q.id)}
@@ -810,11 +856,16 @@ export default function Takeoff() {
               <dt>Grand total</dt><dd data-testid="totals-grand">{money(grand)}</dd>
             </div>
           </dl>
-          {canEdit && (
+          {canQuote ? (
             <Button size="lg" className="mt-6 w-full font-semibold" data-testid="convert-to-quote-button"
                     onClick={() => makeQuote.mutate()} disabled={makeQuote.isPending || rows.length === 0}>
               <FileSignature className="h-4 w-4" /> {latest ? "Create change order" : "Convert to quote"}
             </Button>
+          ) : (
+            <Link to="/billing" data-testid="convert-to-quote-locked"
+                  className={cn(buttonVariants({ variant: "outline", size: "lg" }), "mt-6 w-full gap-2 font-semibold text-ink-3")}>
+              <Lock className="h-4 w-4" /> Quoting needs a paid plan ({planName})
+            </Link>
           )}
           {/* The client pay link belongs to an INVOICE, not a quote — it lives on /invoices. */}
           {latest?.status === "accepted" && (

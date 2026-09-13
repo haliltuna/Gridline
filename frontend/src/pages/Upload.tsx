@@ -2,11 +2,12 @@ import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { UploadCloud, FileText, Loader2, ClipboardList, X, FileSearch } from "lucide-react";
+import { UploadCloud, FileText, Loader2, ClipboardList, X, FileSearch, Lock } from "lucide-react";
 import { apiPost, apiPut, ApiError } from "@/lib/api";
 import { uploadFile } from "@/lib/session";
 import type { CheckoutSession, Job, PageEstimate, SpecEntry, SpecPriceItem, SpecReadResult } from "@/lib/types";
 import Shell, { Panel } from "@/components/Shell";
+import { CAP, usePlanCaps } from "@/lib/plan";
 import UsageMeter from "@/components/UsageMeter";
 import ScanSequence from "@/components/ScanSequence";
 import MaterialPricing from "@/components/MaterialPricing";
@@ -74,6 +75,8 @@ export default function UploadPage() {
   const [address, setAddress] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [spec, setSpec] = useState<File | null>(null);
+  const { can, planName } = usePlanCaps();
+  const canSpec = can(CAP.spec);
   // Spec-first flow: the finish schedule is read (and priced) BEFORE the drawings are measured.
   const [pendingJob, setPendingJob] = useState<Job | null>(null);
   const [specs, setSpecs] = useState<SpecEntry[]>([]);
@@ -261,6 +264,22 @@ export default function UploadPage() {
                   Spec sheet / finish schedule <span className="font-normal text-ink-3">(optional)</span>
                 </h2>
               </div>
+              {!canSpec ? (
+                <div className="border border-hairline bg-surface-2 p-6" data-testid="spec-locked-panel">
+                  <p className="flex items-center gap-2 font-heading text-base font-semibold text-ink">
+                    <Lock className="h-4 w-4 text-brand" /> Spec-sheet reading is Unlimited Pro only
+                  </p>
+                  <p className="mt-2 text-[15px] text-ink-3">
+                    On {planName} you type product names onto each line yourself. Unlimited Pro reads the
+                    finish schedule and writes the specified product into every quote and invoice line.
+                  </p>
+                  <Link to="/billing" data-testid="spec-locked-upgrade"
+                        className={cn(buttonVariants({ variant: "outline" }), "mt-4 font-semibold")}>
+                    See Unlimited Pro
+                  </Link>
+                </div>
+              ) : (
+                <>
               <Drop
                 file={spec} onPick={pick(setSpec)} testId="spec-dropzone" icon={ClipboardList}
                 title="Add the product schedule"
@@ -287,6 +306,8 @@ export default function UploadPage() {
                     onSkip={() => setPricingSaved(true)}
                   />
                 </div>
+              )}
+                </>
               )}
             </div>
           </div>

@@ -36,6 +36,8 @@ CAP_CHANGE_ORDER = "change_order"
 CAP_COSTING = "costing"        # bid vs actual + expenses
 CAP_EXPORT = "export"          # CSV / QuickBooks export
 CAP_TEMPLATES = "templates"    # unit template library
+CAP_EDIT = "edit_lines"        # editing the takeoff (trial results are read-only)
+CAP_SPEC = "spec_sheet"        # spec-sheet upload + automatic product transfer
 CAP_API = "api"
 
 PLANS: list[dict] = [
@@ -43,58 +45,66 @@ PLANS: list[dict] = [
         "id": "trial", "name": "14-day Trial", "price": 0.0, "monthly_price": 0.0,
         "cadence": "free for 14 days", "kind": "trial", "seats": "1 seat", "badge": "",
         "blurb": "Read one real set end to end before you pay a cent.",
-        "pages_included": 10, "jobs_included": 1, "max_file_mb": 60, "seat_count": 1,
+        "pages_included": 15, "jobs_included": 1, "max_file_mb": 60, "seat_count": 1,
         "overage_per_page": 0.0, "lookup_key": "", "lookup_key_monthly": "",
-        "capabilities": [CAP_TAKEOFF, CAP_PDF, CAP_QUOTE],
+        "capabilities": [CAP_TAKEOFF],
         "features": [
-            "10 blueprint pages, 1 job", "Full 12-type flooring logic",
-            "Takeoff + quote PDF export", "No card required", "Invoicing needs a paid plan",
+            "15 blueprint pages, 1 job", "Full 12-type flooring logic",
+            "AI takeoff only — results are read-only on screen",
+            "No quote PDF, no invoicing, no spec-sheet upload", "No card required",
         ],
         "highlight": False,
     },
     {
-        "id": "single", "name": "Single Job", "price": 39.0, "monthly_price": 0.0,
+        "id": "single", "name": "Single Job", "price": 49.0, "monthly_price": 0.0,
         "cadence": "per job, one-off", "kind": "one_time", "seats": "1 seat",
         "badge": "No subscription",
         "blurb": "One set, read properly. For the contractor bidding the occasional job.",
-        "pages_included": 25, "jobs_included": 1, "max_file_mb": 80, "seat_count": 1,
+        "pages_included": 30, "jobs_included": 1, "max_file_mb": 80, "seat_count": 1,
         "overage_per_page": 0.0, "lookup_key": "gridline_single", "lookup_key_monthly": "",
-        "capabilities": [CAP_TAKEOFF, CAP_PDF],
+        "capabilities": [CAP_TAKEOFF, CAP_EDIT, CAP_PDF, CAP_QUOTE],
         "features": [
-            "1 job, up to 25 blueprint pages", "Every room measured, priced and flagged",
-            "Editable takeoff + branded takeoff PDF", "Spec-sheet reading included",
-            "Quotes, invoicing and payments are NOT included",
+            "1 job, up to 30 blueprint pages", "Every room measured, priced and flagged",
+            "Editable takeoff + branded quote PDF to download and send",
+            "Product names typed by you — spec-sheet upload is off",
+            "Invoicing and card payment are NOT included",
         ],
         "highlight": False,
     },
     {
-        "id": "crew", "name": "Job Pack 5", "price": 99.0, "monthly_price": 99.0,
+        "id": "crew", "name": "Job Pack 5", "price": 99.0, "monthly_price": 129.0,
         "cadence": "per month", "kind": "subscription", "seats": "2 seats",
         "badge": "Most popular",
         "blurb": "The working estimator's plan: bid, quote, invoice and get paid.",
         "pages_included": 60, "jobs_included": 5, "max_file_mb": 120, "seat_count": 2,
         "overage_per_page": 0.0, "lookup_key": "gridline_crew_annual",
         "lookup_key_monthly": "gridline_crew_monthly",
-        "capabilities": [CAP_TAKEOFF, CAP_PDF, CAP_QUOTE, CAP_INVOICE, CAP_CHANGE_ORDER],
+        "annual_total": 1188.0, "annual_saving": 360.0,
+        "early_exit_per_month": 30.0,
+        "capabilities": [CAP_TAKEOFF, CAP_EDIT, CAP_PDF, CAP_QUOTE, CAP_INVOICE, CAP_CHANGE_ORDER],
         "features": [
-            "60 pages / month · up to 5 jobs / month", "Quotes emailed with the PDF attached",
-            "Invoices with a real card checkout", "Change orders with full revision history",
-            "2 seats (owner + estimator)", "Upgrade any time — pages never auto-bill",
+            "60 pages / month · up to 5 jobs / month", "Everything in Single Job",
+            "Convert to invoice + Stripe card checkout", "Change orders with full revision history",
+            "Product names still typed by you — spec-sheet upload is off",
+            "2 seats (owner + estimator)",
         ],
         "highlight": True,
     },
     {
-        "id": "pro", "name": "Unlimited Pro", "price": 999.0, "monthly_price": 999.0,
+        "id": "pro", "name": "Unlimited Pro", "price": 259.0, "monthly_price": 329.0,
         "cadence": "per month", "kind": "subscription", "seats": "5 seats",
         "badge": "Best for multi-family",
-        "blurb": "Unlimited uploads, buildings, costing and change orders. 14-day free trial.",
+        "blurb": "Unlimited pages and jobs, spec-sheet auto-transfer, costing. 14-day free trial.",
         "pages_included": -1, "jobs_included": -1, "max_file_mb": 300, "seat_count": 5,
         "overage_per_page": 0.0, "lookup_key": "gridline_pro_annual",
         "lookup_key_monthly": "gridline_pro_monthly",
-        "capabilities": [CAP_TAKEOFF, CAP_PDF, CAP_QUOTE, CAP_INVOICE, CAP_CHANGE_ORDER,
-                         CAP_COSTING, CAP_EXPORT, CAP_TEMPLATES],
+        "annual_total": 3108.0, "annual_saving": 840.0,
+        "early_exit_per_month": 70.0,
+        "capabilities": [CAP_TAKEOFF, CAP_EDIT, CAP_PDF, CAP_QUOTE, CAP_INVOICE, CAP_CHANGE_ORDER,
+                         CAP_COSTING, CAP_EXPORT, CAP_TEMPLATES, CAP_SPEC],
         "features": [
-            "Unlimited pages · unlimited jobs", "Everything in Job Pack 5",
+            "Unlimited pages · unlimited jobs (fair use)", "Everything in Job Pack 5",
+            "Spec-sheet upload: the specified product writes itself into every quote line",
             "Bid vs actual job costing + expense log", "Unit-template library across buildings",
             "CSV / QuickBooks export", "5 seats with owner / estimator / viewer roles",
         ],
@@ -107,9 +117,10 @@ PLANS: list[dict] = [
         "blurb": "Regional and national subcontractors with custom workflows.",
         "pages_included": -1, "jobs_included": -1, "max_file_mb": 500, "seat_count": -1,
         "overage_per_page": 0.0, "lookup_key": "", "lookup_key_monthly": "",
-        "capabilities": [CAP_TAKEOFF, CAP_PDF, CAP_QUOTE, CAP_INVOICE, CAP_CHANGE_ORDER,
-                         CAP_COSTING, CAP_EXPORT, CAP_TEMPLATES, CAP_API],
+        "capabilities": [CAP_TAKEOFF, CAP_EDIT, CAP_PDF, CAP_QUOTE, CAP_INVOICE, CAP_CHANGE_ORDER,
+                         CAP_COSTING, CAP_EXPORT, CAP_TEMPLATES, CAP_SPEC, CAP_API],
         "features": [
+            "Unlimited everything, pooled across the team — no fair-use cap",
             "Pooled page volume, negotiated rate", "Unlimited seats and sub-accounts",
             "Custom floor types and cost books", "Single sign-on", "API + webhooks",
             "Dedicated support with an SLA",
@@ -140,7 +151,7 @@ COMPETITORS = [
     {"name": "STACK", "price": "≈$2,500 / yr per seat", "note": "Cloud takeoff, still manual tracing. Flooring waste/adhesive logic is DIY."},
     {"name": "Togal.AI", "price": "≈$6,000 / yr", "note": "AI area detection for GCs — not flooring-specific, no invoicing."},
     {"name": "Bluebeam Revu", "price": "$260 / yr per seat", "note": "PDF markup tool. You measure every room yourself."},
-    {"name": "Gridline Crew", "price": "$149 / mo annual", "note": "AI reads the set, prices it with flooring logic, quotes, invoices and collects."},
+    {"name": "Gridline Job Pack 5", "price": "$99 / mo annual", "note": "AI reads the set, prices it with flooring logic, quotes, invoices and collects."},
 ]
 
 
@@ -167,6 +178,8 @@ def cap_label(cap: str) -> str:
         CAP_EXPORT: "CSV / QuickBooks export",
         CAP_TEMPLATES: "The unit-template library",
         CAP_PDF: "PDF export",
+        CAP_EDIT: "Editing the takeoff",
+        CAP_SPEC: "Spec-sheet upload and automatic product transfer",
     }.get(cap, cap)
 
 
@@ -174,3 +187,37 @@ def upgrade_message(plan_id: str | None, cap: str) -> str:
     current = plan_for(plan_id)
     target = next((p["name"] for p in PLANS if cap in p["capabilities"] and p["kind"] == "subscription"), "Crew")
     return f"{cap_label(cap)} is not included in {current['name']} — upgrade to {target} on the Billing page."
+
+
+# Commitment / cancellation / retention copy — shown under the pricing toggle and on Billing.
+BILLING_TERMS = {
+    "default_cadence": "annual",
+    "fine_print": (
+        "Annual plans are billed monthly at the discounted rate as a 12-month commitment. "
+        "Cancelling before 12 months triggers one final invoice for the difference between the "
+        "Annual and Monthly rate for the months you were billed ($30/month for Job Pack 5, "
+        "$70/month for Unlimited Pro) — then billing stops immediately, with no charge for the "
+        "months remaining. Monthly plans have no commitment and can be cancelled anytime at no "
+        "cost. Your job history, quotes, and invoices stay accessible and exportable no matter "
+        "your plan or cancellation status."
+    ),
+    "cancellation": [
+        "Monthly plans cancel anytime, no fee.",
+        "Annual plans are a 12-month commitment paid monthly.",
+        "Cancelling an annual plan early triggers exactly one closing invoice: the Annual/Monthly "
+        "difference for each month already billed ($30/mo Job Pack 5, $70/mo Unlimited Pro).",
+        "Billing then stops completely — no charge for the remaining unused months.",
+    ],
+    "retention": (
+        "Every job, blueprint, takeoff, quote and invoice stays permanently viewable and "
+        "exportable as PDF/CSV, whatever your plan or cancellation status. Only NEW actions — a "
+        "new upload, a new AI takeoff, a new invoice or spec-sheet auto-transfer — need an active "
+        "plan at the right tier."
+    ),
+}
+
+
+def early_exit_invoice(plan_id: str | None, months_billed: int) -> float:
+    """The single closing invoice for leaving an annual commitment early."""
+    plan = plan_for(plan_id)
+    return round(float(plan.get("early_exit_per_month") or 0) * max(0, months_billed), 2)

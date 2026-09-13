@@ -1,18 +1,23 @@
 """Spec sheets, unit templates, quote revision diffs and PDF export."""
 
+import os
 import uuid
 from datetime import datetime, timezone
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 
+from lib import mailer
 from lib.ai import apply_specs_to_line, build_line, line_cost, read_spec_sheet
 from lib.authz import account_id, require
 from lib.db import db
 from lib.flooring import FLOOR_TYPE_NAMES, MISC_PRESETS, SCOPES
+from lib.plan_gate import needs_cap
+from lib.pricing import CAP_CHANGE_ORDER, CAP_PDF, CAP_SPEC, CAP_TEMPLATES
 from lib.pdf import change_order_pdf, DEFAULT_TEMPLATE, TEMPLATES, quote_pdf, takeoff_pdf
 from models.schemas import (
     FieldChange,
+    SendOut,
     SpecPricingIn,
     DiffLine, Job, QuoteDiff, SpecReadResult, TakeoffLine, UnitTemplate,
     UnitTemplateApplyIn, UnitTemplateLine, UnitTemplateSaveIn,
@@ -38,6 +43,15 @@ async def _company(user: dict) -> dict:
             "tax_number": s.get("tax_number", "")}
 
 
+def _email_footer(company: dict, lead: str) -> str:
+    bits = [f"{lead} or contact {company['email']}."]
+    if company.get("business_number"):
+        bits.append(f"Business no. {company['business_number']}.")
+    if company.get("tax_number"):
+        bits.append(f"Tax no. {company['tax_number']}.")
+    return " ".join(bits)
+
+
 # ---------- reference data for the advanced menu ----------
 @router.get("/reference/options")
 async def reference_options():
@@ -52,6 +66,7 @@ async def reference_options():
 # ---------- spec sheet ----------
 @router.post("/jobs/{job_id}/spec-sheet", response_model=SpecReadResult)
 async def upload_spec_sheet(job_id: str, file: UploadFile = File(...), user: dict = Depends(require("takeoff:write"))):
+    await needs_cap(user, CAP_SPEC)
     await _job_or_404(job_id, account_id(user))
     raw = await file.read()
     if not raw:
@@ -83,6 +98,7 @@ async def upload_spec_sheet(job_id: str, file: UploadFile = File(...), user: dic
 
 @router.post("/jobs/{job_id}/specs/reapply", response_model=SpecReadResult)
 async def reapply_specs(job_id: str, user: dict = Depends(require("takeoff:write"))):
+    await needs_cap(user, CAP_SPEC)
     job = await _job_or_404(job_id, account_id(user))
     specs = job.get("specs") or []
     if not specs:
@@ -100,12 +116,14 @@ async def reapply_specs(job_id: str, user: dict = Depends(require("takeoff:write
 # ---------- unit templates ----------
 @router.get("/unit-templates", response_model=list[UnitTemplate])
 async def list_unit_templates(user: dict = Depends(require("takeoff:read"))):
+    await needs_cap(user, CAP_TEMPLATES)
     docs = await db.unit_templates.find({"user_id": account_id(user)}, {"_id": 0}).sort("created_at", -1).to_list(200)
     return [UnitTemplate(**d) for d in docs]
 
 
 @router.post("/unit-templates", response_model=UnitTemplate)
 async def save_unit_template(body: UnitTemplateSaveIn, job_id: str = Query(...), user: dict = Depends(require("takeoff:write"))):
+    await needs_cap(user, CAP_TEMPLATES)
     await _job_or_404(job_id, account_id(user))
     lines = await db.takeoff_lines.find(
         {"job_id": job_id, "building": body.building, "unit": body.unit}, {"_id": 0}
@@ -127,6 +145,7 @@ async def save_unit_template(body: UnitTemplateSaveIn, job_id: str = Query(...),
 
 @router.delete("/unit-templates/{template_id}")
 async def delete_unit_template(template_id: str, user: dict = Depends(require("takeoff:write"))):
+    await needs_cap(user, CAP_TEMPLATES)
     res = await db.unit_templates.delete_one({"id": template_id, "user_id": account_id(user)})
     if not res.deleted_count:
         raise HTTPException(status_code=404, detail="Template not found")
@@ -135,6 +154,7 @@ async def delete_unit_template(template_id: str, user: dict = Depends(require("t
 
 @router.post("/unit-templates/{template_id}/apply", response_model=list[TakeoffLine])
 async def apply_unit_template(template_id: str, body: UnitTemplateApplyIn, user: dict = Depends(require("takeoff:write"))):
+    await needs_cap(user, CAP_TEMPLATES)
     tpl = await db.unit_templates.find_one({"id": template_id, "user_id": account_id(user)}, {"_id": 0})
     if not tpl:
         raise HTTPException(status_code=404, detail="Template not found")
@@ -256,6 +276,7 @@ def _template(requested: str | None, fallback: str) -> str:
 
 @router.get("/jobs/{job_id}/takeoff.pdf")
 async def download_takeoff_pdf(job_id: str, template: str | None = None, user: dict = Depends(require("export:read"))):
+    await needs_cap(user, CAP_PDF)
     job = await _job_or_404(job_id, account_id(user))
     company = await _company(user)
     docs = await db.takeoff_lines.find({"job_id": job_id}, {"_id": 0}).to_list(4000)
@@ -268,6 +289,7 @@ async def download_takeoff_pdf(job_id: str, template: str | None = None, user: d
 
 @router.get("/quotes/{quote_id}/pdf")
 async def download_quote_pdf(quote_id: str, template: str | None = None, user: dict = Depends(require("export:read"))):
+    await needs_cap(user, CAP_PDF)
     q = await db.quotes.find_one({"id": quote_id, "user_id": account_id(user)}, {"_id": 0})
     if not q:
         raise HTTPException(status_code=404, detail="Quote not found")
@@ -279,6 +301,7 @@ async def download_quote_pdf(quote_id: str, template: str | None = None, user: d
 
 @router.get("/invoices/{invoice_id}/pdf")
 async def download_invoice_pdf(invoice_id: str, template: str | None = None, user: dict = Depends(require("export:read"))):
+    await needs_cap(user, CAP_PDF)
     inv = await db.invoices.find_one({"id": invoice_id, "user_id": account_id(user)}, {"_id": 0})
     if not inv:
         raise HTTPException(status_code=404, detail="Invoice not found")
@@ -296,6 +319,7 @@ _ = uuid, datetime, timezone, Job
 
 @router.put("/jobs/{job_id}/specs/pricing", response_model=SpecReadResult)
 async def price_specs(job_id: str, body: SpecPricingIn, user: dict = Depends(require("takeoff:write"))):
+    await needs_cap(user, CAP_SPEC)
     """Price the flooring materials from the spec sheet before (or after) the blueprint is read.
 
     Each item points at a spec by list index, carries the material price per sq ft the estimator
@@ -337,9 +361,59 @@ async def price_specs(job_id: str, body: SpecPricingIn, user: dict = Depends(req
 async def download_change_order_pdf(quote_id: str, against: str = Query(...), template: str | None = None,
                                     user: dict = Depends(require("export:read"))):
     """The revision diff as a one-page PDF the client can sign off."""
+    await needs_cap(user, CAP_CHANGE_ORDER)
     diff = await quote_diff(quote_id, against, user)
     q = await db.quotes.find_one({"id": quote_id, "user_id": account_id(user)}, {"_id": 0})
     job = await db.jobs.find_one({"id": (q or {}).get("job_id")}, {"_id": 0}) or {}
     company = await _company(user)
     data = change_order_pdf(diff.model_dump(), job, company, _template(template, company["template"]))
     return _pdf_response(data, f"Change order {diff.to_number}.pdf")
+
+
+@router.post("/quotes/{quote_id}/change-order/send", response_model=SendOut)
+async def send_change_order(quote_id: str, against: str = Query(...),
+                            user: dict = Depends(require("quote:write"))):
+    """Email the client the change-order PDF with a link to e-sign it.
+
+    The opaque approve token in the link is the client's credential — no login, and signing
+    accepts this revision only, leaving earlier ones on record.
+    """
+    await needs_cap(user, CAP_CHANGE_ORDER)
+    diff = await quote_diff(quote_id, against, user)
+    q = await db.quotes.find_one({"id": quote_id, "user_id": account_id(user)}, {"_id": 0})
+    if not q:
+        raise HTTPException(status_code=404, detail="Quote not found")
+    job = await db.jobs.find_one({"id": q["job_id"]}, {"_id": 0}) or {}
+    company = await _company(user)
+    token = q.get("approve_token") or uuid.uuid4().hex
+    moved = [row.model_dump() for row in diff.lines if row.change != "unchanged"]
+    await db.quotes.update_one({"id": quote_id}, {"$set": {
+        "approve_token": token,
+        "change_order_from_total": diff.from_total,
+        "change_order_lines": moved,
+        "status": "sent" if q.get("status") == "draft" else q.get("status", "sent"),
+    }})
+
+    pdf = change_order_pdf(diff.model_dump(), job, company, _template(None, company["template"]))
+    origin = (os.environ.get("APP_URL") or "").rstrip("/")
+    approve_url = f"{origin}/approve/{token}"
+    delta = diff.delta
+    html = mailer.shell(
+        title=f"Change order · {diff.to_number}",
+        intro=(f"{company['name']} has issued a change order for "
+               f"<strong>{job.get('name', 'your project')}</strong>. The one-page comparison is "
+               f"attached; you can approve and sign it online."),
+        rows=[("Previous total", f"${diff.from_total:,.2f}"),
+              ("Revised total", f"${diff.to_total:,.2f}"),
+              ("Change", f"{'+' if delta >= 0 else '-'}${abs(delta):,.2f}"),
+              ("Lines changed", str(len(moved)))],
+        cta=("Review & e-sign the change order", approve_url),
+        footer=_email_footer(company, "Questions? Reply to this email"),
+    )
+    to = job.get("client_email") or user["email"]
+    subject = f"Change order {diff.to_number} — {job.get('name', '')}"
+    sent = await mailer.send(to, subject, html, attachment=(f"Change order {diff.to_number}.pdf", pdf))
+    note = ("emailed with the change-order PDF attached and an e-sign link"
+            if sent["delivered"] else f"NOT delivered — {sent['error']}")
+    return SendOut(ok=True, to=to, subject=subject, mocked=not sent["delivered"],
+                   message=f"Change order {diff.to_number} {note} ({to}).")
