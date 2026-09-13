@@ -52,7 +52,7 @@ export default function Login() {
   });
 
   return (
-    <div className="relative grid min-h-screen place-items-center overflow-hidden bg-base px-5 py-12">
+    <div className="relative grid min-h-screen place-items-center overflow-hidden bg-canvas px-5 py-12">
       <div className="gl-grid absolute inset-0 opacity-30" />
       <div className="relative w-full max-w-md gl-rise">
         <Link to="/" data-testid="login-home-link" className="mb-8 inline-block"><Logo /></Link>

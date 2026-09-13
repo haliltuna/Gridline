@@ -35,7 +35,7 @@ export default function PaymentResult({ cancelled = false }: { cancelled?: boole
   const pending = !cancelled && !paid && tries < 10;
 
   return (
-    <div className="relative grid min-h-screen place-items-center overflow-hidden bg-base px-5 py-12">
+    <div className="relative grid min-h-screen place-items-center overflow-hidden bg-canvas px-5 py-12">
       <div className="gl-grid absolute inset-0 opacity-25" />
       <div className="relative w-full max-w-lg gl-rise border border-hairline bg-surface p-8">
         <Logo />

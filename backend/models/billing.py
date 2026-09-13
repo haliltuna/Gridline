@@ -69,6 +69,7 @@ class Usage(BaseModel):
     plan_name: str
     period: str
     pages_included: int
+    page_credits: int
     pages_used: int
     pages_remaining: int
     limit_reached: bool
@@ -81,6 +82,30 @@ class Usage(BaseModel):
     capabilities: list[str]
     seat_count: int
     seats_used: int
+
+
+class TopUpPack(BaseModel):
+    id: str
+    name: str
+    price: float
+    pages: int
+    blurb: str
+
+
+class PageEstimate(BaseModel):
+    filename: str
+    pages: int
+    size_mb: float
+    plan_name: str
+    pages_included: int
+    pages_remaining: int
+    pages_after: int
+    fits: bool
+    reason: str
+
+
+class ThemeIn(BaseModel):
+    theme: str
 
 
 class CostingRow(BaseModel):

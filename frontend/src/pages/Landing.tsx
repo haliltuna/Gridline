@@ -238,8 +238,8 @@ export default function Landing() {
   const demo = useInView<HTMLDivElement>(0.3);
 
   return (
-    <div className="min-h-screen bg-base text-ink">
-      <header className="sticky top-0 z-40 border-b border-hairline/80 bg-base/85 backdrop-blur">
+    <div className="min-h-screen bg-canvas text-ink">
+      <header className="sticky top-0 z-40 border-b border-hairline/80 bg-canvas/85 backdrop-blur">
         <div className="mx-auto flex max-w-[1200px] items-center justify-between px-5 py-4">
           <Logo />
           <div className="flex items-center gap-2">
@@ -324,7 +324,7 @@ export default function Landing() {
       <section className="mx-auto max-w-[1200px] px-5 py-16"><Reveal><Stats /></Reveal></section>
 
       {/* total-recall scan demo */}
-      <section className="border-y border-hairline/80 bg-base-2">
+      <section className="border-y border-hairline/80 bg-canvas-2">
         <div className="mx-auto max-w-[1200px] px-5 py-20" ref={demo.ref}>
           <Reveal>
             <p className="font-mono text-xs uppercase tracking-[0.2em] text-brand">Watch it measure</p>
@@ -339,6 +339,63 @@ export default function Landing() {
           <div className="mt-10" data-testid="landing-scan-demo">
             <ScanSequence running={demo.seen} loop filename="oakridge-commons-phase2.pdf" />
           </div>
+        </div>
+      </section>
+
+      {/* honesty / metering transparency */}
+      <section className="border-y border-hairline bg-canvas-2">
+        <div className="mx-auto max-w-[1200px] px-5 py-20" data-testid="landing-transparency">
+          <Reveal>
+            <p className="font-mono text-xs uppercase tracking-[0.2em] text-brand">No meter games</p>
+            <h2 className="mt-3 max-w-3xl font-heading text-4xl font-bold tracking-tight text-ink">
+              We show you the page count before we read a single sheet
+            </h2>
+            <p className="mt-5 max-w-3xl text-lg leading-relaxed text-ink-3">
+              Blueprint AI is priced per page because that is exactly how it costs us —
+              {cost ? ` $${cost.page_cost.toFixed(3)}` : " $0.115"} of Claude Opus per sheet. So we tell you
+              the truth up front: drop a set in and Gridline counts it, shows what it will use out of your
+              allowance and what is left afterwards, and waits for you to say go.
+            </p>
+          </Reveal>
+          <div className="mt-10 grid gap-6 md:grid-cols-3">
+            {[
+              { t: "Count first, read second", d: "Every upload is page-counted and priced against your allowance before any AI runs. No blind spend." },
+              { t: "No overage billing, ever", d: "Out of pages? The read is refused with an upgrade prompt. We never auto-charge a card for extra pages." },
+              { t: "Top up instead of upgrading", d: "A set ran long? Buy a 25-page pack for $29. It never expires and never auto-renews." },
+            ].map((x, i) => (
+              <Reveal key={x.t} delay={i * 70}>
+                <div className="h-full border border-hairline bg-surface p-6">
+                  <Check className="h-5 w-5 text-brand" />
+                  <h3 className="mt-4 font-heading text-lg font-semibold text-ink">{x.t}</h3>
+                  <p className="mt-2 text-[15px] leading-relaxed text-ink-3">{x.d}</p>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+          <Reveal delay={120}>
+            <div className="mt-8 border border-brand/40 bg-surface p-7" data-testid="landing-why-upgrade">
+              <h3 className="font-heading text-2xl font-bold text-ink">So why upgrade at all?</h3>
+              <p className="mt-4 max-w-3xl text-[16px] leading-relaxed text-ink-2">
+                Because the $49 one-off stops at the takeoff. Upgrading is what turns a measurement into
+                money: <strong className="text-ink">Crew</strong> ($149/mo annual) sends the quote as a
+                branded PDF, invoices it and collects by card, and keeps every change order as its own
+                revision. <strong className="text-ink">Contractor Pro</strong> ($249/mo) adds unlimited
+                jobs, bid-vs-actual costing so you see a job losing margin while you can still fix it,
+                unit templates that repeat one layout across 40 doors, and QuickBooks export.
+                <strong className="text-ink"> Agency</strong> ($499/mo) pools 250 pages across 15 seats
+                with roles. Per page you also pay less the higher you go — and the annual toggle takes
+                another 20% off.
+              </p>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <a href="#pricing" data-testid="why-upgrade-pricing-link"
+                   className={cn(buttonVariants({ size: "lg" }), "font-semibold")}>Compare the tiers</a>
+                <Link to="/login?mode=signup" data-testid="why-upgrade-trial-link"
+                      className={cn(buttonVariants({ variant: "outline", size: "lg" }), "font-semibold")}>
+                  Start free with 10 pages
+                </Link>
+              </div>
+            </div>
+          </Reveal>
         </div>
       </section>
 
@@ -364,7 +421,7 @@ export default function Landing() {
       </section>
 
       {/* how it works */}
-      <section className="border-y border-hairline/80 bg-base-2">
+      <section className="border-y border-hairline/80 bg-canvas-2">
         <div className="mx-auto max-w-[1200px] px-5 py-20">
           <Reveal>
             <p className="font-mono text-xs uppercase tracking-[0.2em] text-brand">How it works</p>
@@ -388,7 +445,7 @@ export default function Landing() {
       <section className="mx-auto max-w-[1200px] px-5 py-20"><Reveal><RoiCalculator /></Reveal></section>
 
       {/* testimonials */}
-      <section className="border-y border-hairline/80 bg-base-2">
+      <section className="border-y border-hairline/80 bg-canvas-2">
         <div className="mx-auto max-w-[1200px] px-5 py-20">
           <Reveal>
             <p className="font-mono text-xs uppercase tracking-[0.2em] text-brand">From the trade</p>
@@ -552,7 +609,7 @@ export default function Landing() {
       </section>
 
       {/* trust / security */}
-      <section className="border-y border-hairline/80 bg-base-2">
+      <section className="border-y border-hairline/80 bg-canvas-2">
         <div className="mx-auto max-w-[1200px] px-5 py-16">
           <Reveal>
             <p className="font-mono text-xs uppercase tracking-[0.2em] text-brand">Your drawings, handled properly</p>
@@ -595,7 +652,7 @@ export default function Landing() {
       </section>
 
       {/* demo / contact */}
-      <section id="demo" className="border-t border-hairline/80 bg-base-2">
+      <section id="demo" className="border-t border-hairline/80 bg-canvas-2">
         <div className="mx-auto grid max-w-[1200px] gap-12 px-5 py-20 lg:grid-cols-[0.9fr_1.1fr]">
           <Reveal>
             <p className="font-mono text-xs uppercase tracking-[0.2em] text-brand">Book a demo</p>
@@ -619,7 +676,7 @@ export default function Landing() {
         </div>
       </section>
 
-      <footer className="border-t border-hairline/80 bg-base">
+      <footer className="border-t border-hairline/80 bg-canvas">
         <div className="mx-auto flex max-w-[1200px] flex-col gap-6 px-5 py-12 md:flex-row md:items-center md:justify-between">
           <div>
             <Logo />

@@ -109,7 +109,7 @@ export default function Team() {
                 Give <b>{issued.email}</b> this password — they can sign in straight away.
               </p>
               <div className="mt-3 flex items-center gap-2">
-                <code className="flex-1 bg-base-2 px-3 py-2 font-mono text-base text-ink">{issued.temp_password}</code>
+                <code className="flex-1 bg-canvas-2 px-3 py-2 font-mono text-base text-ink">{issued.temp_password}</code>
                 <Button variant="outline" size="icon-sm" data-testid="team-copy-password"
                         onClick={() => { void navigator.clipboard.writeText(issued.temp_password ?? ""); toast.success("Copied"); }}>
                   <Copy className="h-4 w-4" />

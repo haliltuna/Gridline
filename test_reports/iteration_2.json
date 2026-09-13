@@ -1,0 +1,74 @@
+{
+  "iteration": 2,
+  "summary": "Re-ran existing browser checks + backend suite against the theme/upload/billing acceptance matrix (7 criteria). 6/7 passed. Found 1 real frontend bug: theme does not follow the account across a fresh session (localStorage cleared) even though the backend correctly persists and returns it.",
+  "passed": 6,
+  "failed": 1,
+  "bugs": [
+    {
+      "severity": "medium",
+      "criterion": "Theme follows the account across sessions",
+      "description": "Setting theme=daylight persists correctly server-side (PATCH /api/me/theme -> 200, GET /api/auth/me -> theme:'daylight'), but after clearing localStorage and reloading, the app repaints as 'readout' (default) instead of reading the account's stored theme from /api/auth/me. The frontend theme-init logic only reads localStorage, not the account record, so a fresh browser/session loses the chosen theme.",
+      "evidence": "Browser check 'theme-persists-via-account' failed twice (rerun-confirmed, not flaky): after page.evaluate(()=>localStorage.clear()) + reload, html[data-theme] stayed 'readout' (14x observed) instead of expected 'daylight'. Backend cross-check via curl: POST /api/auth/login -> 200; GET /api/auth/me -> theme:'readout' initially; PATCH /api/me/theme {theme:'daylight'} -> 200 body theme:'daylight'; GET /api/auth/me again -> theme:'daylight' (confirmed persisted server-side, so this is a frontend-only bug). Reset account back to 'readout' after the test to avoid polluting shared seed data."
+    }
+  ],
+  "action_items": [],
+  "retest_needed": true,
+  "checks": [
+    {
+      "criterion": "BUG FIX: primary buttons readable in all three themes (were white-on-yellow)",
+      "name": "primary-button-contrast-per-theme",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "hero-cta-button on / checked across readout/blueprint/daylight: bg colors match rgb(226,249,82)/rgb(91,233,224)/rgb(22,80,155) respectively, text luminance dark for readout & blueprint, light for daylight -- never white-on-yellow. Screenshots captured per theme."
+    },
+    {
+      "criterion": "Each theme loads its own fonts",
+      "name": "theme-font-families-differ",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "heading/body/mono computed font-family matched Chakra Petch/Sora/JetBrains Mono (readout), Syne/Inter Tight/IBM Plex Mono (blueprint), Archivo/Instrument Sans/Space Mono (daylight); all three heading fonts pairwise distinct."
+    },
+    {
+      "criterion": "Theme follows the account across sessions",
+      "name": "theme-persists-via-account",
+      "lane": "browser",
+      "status": "failed",
+      "evidence": "PATCH /api/me/theme + GET /api/auth/me confirmed server-side theme='daylight' persisted, but after localStorage.clear() + reload, html[data-theme] remained 'readout' instead of 'daylight'. Failed identically on rerun (not flaky). See bugs[]."
+    },
+    {
+      "criterion": "Theme repaints the whole app",
+      "name": "theme-repaints-all-pages",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "With theme=blueprint set, /dashboard, /upload, /costing, /billing and /jobs/seed-job-harborview all rendered body background rgb(6,10,22) (blueprint --t-base), correct testids visible on each, zero page errors collected."
+    },
+    {
+      "criterion": "Page estimate before a read",
+      "name": "upload-page-estimate-shown",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "upload-submit-button disabled with no file; after picking a 3-page PDF fixture, page-estimate visible, estimate-pages contains '3 page', estimate-cell-set/now/after visible, submit button text 'Read 3 page...' and enabled (fits within plan quota)."
+    },
+    {
+      "criterion": "Top-up purchase works",
+      "name": "billing-topup-purchase-completes",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "/billing shows topup-topup25 ($29) and topup-topup60 ($59) panels; Buy pack opened checkout.stripe.com, filled test card 4242 4242 4242 4242, paid, redirected to /payment/success with 'confirmed' text, and /api/billing/usage afterwards showed page_credits increased by >=25 and pages_remaining incremented accordingly."
+    },
+    {
+      "criterion": "Landing states metering honesty and why to upgrade",
+      "name": "landing-transparency-and-why-upgrade",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "landing-transparency visible with page-related copy; landing-why-upgrade visible containing Crew/Contractor/Agency; why-upgrade-pricing-link points to #pricing and scrolls landing-pricing into view; why-upgrade-trial-link href matches /login?mode=signup."
+    },
+    {
+      "criterion": "Wrong password / session behavior (regression coverage carried from prior iteration, kept green)",
+      "name": "test_tscheck_auth_session.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "pytest -q against live server: 3 passed, 4 warnings in 0.91s (login sets cross-site cookie & authenticates, wrong password rejected 401, logout destroys session)."
+    }
+  ]
+}

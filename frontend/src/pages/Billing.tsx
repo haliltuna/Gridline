@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Check, CreditCard, Gauge, ExternalLink } from "lucide-react";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
-import type { CheckoutOut, CheckoutSession, CostModel, PlanTier, Usage, User } from "@/lib/types";
+import type { CheckoutOut, CheckoutSession, CostModel, PlanTier, TopUpPack, Usage, User } from "@/lib/types";
 import { money } from "@/lib/types";
 import Shell, { Panel } from "@/components/Shell";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ export default function Billing() {
   const me = useQuery<User>({ queryKey: ["me"], queryFn: () => apiGet<User>("/auth/me"), retry: false });
   const usage = useQuery<Usage>({ queryKey: ["usage"], queryFn: () => apiGet<Usage>("/billing/usage"), retry: false });
   const costs = useQuery<CostModel>({ queryKey: ["cost-model"], queryFn: () => apiGet<CostModel>("/billing/cost-model"), retry: false });
+  const topUps = useQuery<TopUpPack[]>({ queryKey: ["top-ups"], queryFn: () => apiGet<TopUpPack[]>("/billing/top-ups"), retry: false });
 
   const checkout = useMutation({
     mutationFn: (planId: string) =>
@@ -216,6 +217,35 @@ export default function Billing() {
           );
         })}
       </div>
+
+      <Panel className="mt-10" data-testid="billing-topups">
+        <h2 className="font-heading text-xl font-semibold text-ink">Page top-ups</h2>
+        <p className="mt-2 max-w-2xl text-[15px] text-ink-3">
+          A set ran long? Buy pages instead of jumping a tier. Packs never expire, never auto-renew,
+          and there is no overage billing — you only ever pay when you choose to.
+        </p>
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          {(topUps.data ?? []).map((t) => (
+            <div key={t.id} data-testid={`topup-${t.id}`}
+                 className="flex flex-wrap items-center justify-between gap-4 border border-hairline bg-surface-2 p-5">
+              <div>
+                <div className="font-heading text-lg font-semibold text-ink">{t.name}</div>
+                <p className="mt-1 max-w-sm text-[15px] text-ink-3">{t.blurb}</p>
+                <p className="mt-2 font-mono text-xs text-ink-3">
+                  ${(t.price / t.pages).toFixed(2)} per page
+                </p>
+              </div>
+              <div className="text-right">
+                <div className="font-mono text-3xl font-semibold text-brand" data-testid={`topup-price-${t.id}`}>${t.price}</div>
+                <Button size="sm" className="mt-2 font-semibold" data-testid={`topup-buy-${t.id}`}
+                        disabled={checkout.isPending} onClick={() => checkout.mutate(t.id)}>
+                  Buy pack
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Panel>
 
       <Panel className="mt-10" data-testid="billing-competitors">
         <h2 className="font-heading text-xl font-semibold text-ink">What the trade pays elsewhere</h2>

@@ -53,7 +53,7 @@ PLANS: list[dict] = [
         "highlight": False,
     },
     {
-        "id": "single", "name": "Single Takeoff", "price": 49.0, "monthly_price": 0.0,
+        "id": "single", "name": "Single Job", "price": 39.0, "monthly_price": 0.0,
         "cadence": "per job, one-off", "kind": "one_time", "seats": "1 seat",
         "badge": "No subscription",
         "blurb": "One set, read properly. For the contractor bidding the occasional job.",
@@ -68,52 +68,35 @@ PLANS: list[dict] = [
         "highlight": False,
     },
     {
-        "id": "crew", "name": "Crew", "price": 149.0, "monthly_price": 186.0,
+        "id": "crew", "name": "Job Pack 5", "price": 99.0, "monthly_price": 99.0,
         "cadence": "per month", "kind": "subscription", "seats": "2 seats",
         "badge": "Most popular",
         "blurb": "The working estimator's plan: bid, quote, invoice and get paid.",
-        "pages_included": 60, "jobs_included": 3, "max_file_mb": 120, "seat_count": 2,
+        "pages_included": 60, "jobs_included": 5, "max_file_mb": 120, "seat_count": 2,
         "overage_per_page": 0.0, "lookup_key": "gridline_crew_annual",
         "lookup_key_monthly": "gridline_crew_monthly",
         "capabilities": [CAP_TAKEOFF, CAP_PDF, CAP_QUOTE, CAP_INVOICE, CAP_CHANGE_ORDER],
         "features": [
-            "60 pages / month · 3 jobs / month", "Quotes emailed with the PDF attached",
+            "60 pages / month · up to 5 jobs / month", "Quotes emailed with the PDF attached",
             "Invoices with a real card checkout", "Change orders with full revision history",
             "2 seats (owner + estimator)", "Upgrade any time — pages never auto-bill",
         ],
         "highlight": True,
     },
     {
-        "id": "pro", "name": "Contractor Pro", "price": 249.0, "monthly_price": 311.0,
+        "id": "pro", "name": "Unlimited Pro", "price": 999.0, "monthly_price": 999.0,
         "cadence": "per month", "kind": "subscription", "seats": "5 seats",
         "badge": "Best for multi-family",
-        "blurb": "Unlimited jobs, job costing and the unit-template library.",
-        "pages_included": 100, "jobs_included": -1, "max_file_mb": 200, "seat_count": 5,
+        "blurb": "Unlimited uploads, buildings, costing and change orders. 14-day free trial.",
+        "pages_included": -1, "jobs_included": -1, "max_file_mb": 300, "seat_count": 5,
         "overage_per_page": 0.0, "lookup_key": "gridline_pro_annual",
         "lookup_key_monthly": "gridline_pro_monthly",
         "capabilities": [CAP_TAKEOFF, CAP_PDF, CAP_QUOTE, CAP_INVOICE, CAP_CHANGE_ORDER,
                          CAP_COSTING, CAP_EXPORT, CAP_TEMPLATES],
         "features": [
-            "100 pages / month · unlimited jobs", "Everything in Crew",
+            "Unlimited pages · unlimited jobs", "Everything in Job Pack 5",
             "Bid vs actual job costing + expense log", "Unit-template library across buildings",
             "CSV / QuickBooks export", "5 seats with owner / estimator / viewer roles",
-        ],
-        "highlight": False,
-    },
-    {
-        "id": "agency", "name": "Agency", "price": 499.0, "monthly_price": 624.0,
-        "cadence": "per month", "kind": "subscription", "seats": "15 seats",
-        "badge": "Multi-crew",
-        "blurb": "Several estimators bidding at once across regions.",
-        "pages_included": 250, "jobs_included": -1, "max_file_mb": 300, "seat_count": 15,
-        "overage_per_page": 0.0, "lookup_key": "gridline_agency_annual",
-        "lookup_key_monthly": "gridline_agency_monthly",
-        "capabilities": [CAP_TAKEOFF, CAP_PDF, CAP_QUOTE, CAP_INVOICE, CAP_CHANGE_ORDER,
-                         CAP_COSTING, CAP_EXPORT, CAP_TEMPLATES, CAP_API],
-        "features": [
-            "250 pages / month, pooled across seats", "Everything in Contractor Pro",
-            "15 seats · priority blueprint queue", "Shared template + cost-book library",
-            "API access", "Pooled pages across the whole team",
         ],
         "highlight": False,
     },
@@ -134,6 +117,19 @@ PLANS: list[dict] = [
         "highlight": False,
     },
 ]
+
+# One-off page packs: bought when a set overruns the allowance, instead of jumping a tier.
+# 25 pages costs us $2.88, so $29 holds a 90% margin — and the customer only ever pays
+# when they choose to.
+TOP_UPS: list[dict] = [
+    {"id": "topup25", "name": "25-page top-up", "price": 29.0, "pages": 25,
+     "lookup_key": "gridline_topup_25",
+     "blurb": "One-off pack for a set that runs past your allowance. Never expires, never auto-renews."},
+    {"id": "topup60", "name": "60-page top-up", "price": 59.0, "pages": 60,
+     "lookup_key": "gridline_topup_60",
+     "blurb": "For a large set or a busy month. Cheaper per page than the 25-pack."},
+]
+TOP_UP_BY_ID = {t["id"]: t for t in TOP_UPS}
 
 BY_ID = {p["id"]: p for p in PLANS}
 DEFAULT_PLAN = "trial"

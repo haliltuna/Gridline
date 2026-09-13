@@ -1,6 +1,8 @@
 // Hand-written mirrors of backend/models/schemas.py — keep the pair in sync in one edit.
 
 export interface User {
+  theme?: string;
+  page_credits?: number;
   id: string;
   email: string;
   name: string;
@@ -398,6 +400,7 @@ export interface Usage {
   plan_name: string;
   period: string;
   pages_included: number;
+  page_credits: number;
   pages_used: number;
   pages_remaining: number;
   limit_reached: boolean;
@@ -448,4 +451,24 @@ export interface CostingOverview {
   collected_total: number;
   variance_total: number;
   margin_pct: number;
+}
+
+export interface TopUpPack {
+  id: string;
+  name: string;
+  price: number;
+  pages: number;
+  blurb: string;
+}
+
+export interface PageEstimate {
+  filename: string;
+  pages: number;
+  size_mb: number;
+  plan_name: string;
+  pages_included: number;
+  pages_remaining: number;
+  pages_after: number;
+  fits: boolean;
+  reason: string;
 }

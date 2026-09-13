@@ -1,15 +1,15 @@
 import { useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { UploadCloud, FileText, Loader2, ClipboardList, X } from "lucide-react";
+import { UploadCloud, FileText, Loader2, ClipboardList, X, FileSearch } from "lucide-react";
 import { apiPost, ApiError } from "@/lib/api";
 import { uploadFile } from "@/lib/session";
-import type { Job, SpecReadResult } from "@/lib/types";
+import type { CheckoutSession, Job, PageEstimate, SpecReadResult } from "@/lib/types";
 import Shell, { Panel } from "@/components/Shell";
 import UsageMeter from "@/components/UsageMeter";
 import ScanSequence from "@/components/ScanSequence";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -84,6 +84,34 @@ export default function UploadPage() {
     setter(f);
   };
 
+  // Page estimate: count the set and show what it will consume BEFORE we spend any AI
+  // budget, so nobody is surprised by what a read costs them.
+  const [estimate, setEstimate] = useState<PageEstimate | null>(null);
+  const [estimating, setEstimating] = useState(false);
+
+  const pickBlueprint = (f: File | null) => {
+    pick(setFile)(f);
+    setEstimate(null);
+    if (!f || !f.name.toLowerCase().endsWith(".pdf")) return;
+    setEstimating(true);
+    const form = new FormData();
+    form.append("file", f);
+    void fetch("/api/jobs/estimate", { method: "POST", body: form, credentials: "include" })
+      .then(async (r) => {
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail ?? "Could not read that PDF");
+        setEstimate((await r.json()) as PageEstimate);
+      })
+      .catch((err: Error) => toast.error(err.message))
+      .finally(() => setEstimating(false));
+  };
+
+  const topUp = useMutation({
+    mutationFn: (packId: string) =>
+      apiPost<CheckoutSession>("/payments/checkout", { plan_id: packId, period: "one_time", origin_url: window.location.origin }),
+    onSuccess: (s) => { window.location.href = s.checkout_url; },
+    onError: () => toast.error("Could not open the top-up checkout"),
+  });
+
   const run = useMutation({
     mutationFn: async () => {
       if (!file) throw new Error("Choose a blueprint PDF first");
@@ -132,10 +160,56 @@ export default function UploadPage() {
           <div className="space-y-5">
             <UsageMeter />
             <Drop
-              tall file={file} onPick={pick(setFile)} testId="upload-dropzone" icon={UploadCloud}
+              tall file={file} onPick={pickBlueprint} testId="upload-dropzone" icon={UploadCloud}
               title="Drag your blueprint PDF here"
               hint="or click to browse — 100+ page sets are fine"
             />
+
+            {estimating && (
+              <p className="flex items-center gap-2 border border-hairline bg-surface px-4 py-3 font-mono text-sm text-ink-3"
+                 data-testid="estimate-loading">
+                <Loader2 className="h-4 w-4 animate-spin text-brand" /> Counting the set…
+              </p>
+            )}
+
+            {estimate && (
+              <div data-testid="page-estimate"
+                   className={cn("border p-5", estimate.fits ? "border-brand/40 bg-surface" : "border-red-500/50 bg-red-500/10")}>
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.2em] text-ink-3">
+                      <FileSearch className="h-3.5 w-3.5" /> Before we read it
+                    </div>
+                    <p className="mt-2 font-heading text-2xl font-semibold text-ink" data-testid="estimate-pages">
+                      {estimate.pages} page{estimate.pages === 1 ? "" : "s"} · {estimate.size_mb} MB
+                    </p>
+                    <p className="mt-1 text-[15px] text-ink-2" data-testid="estimate-reason">{estimate.reason}</p>
+                  </div>
+                  {!estimate.fits && (
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" variant="outline" className="font-semibold" data-testid="estimate-topup-button"
+                              disabled={topUp.isPending} onClick={() => topUp.mutate("topup25")}>
+                        25-page top-up · $29
+                      </Button>
+                      <Link to="/billing" data-testid="estimate-upgrade-link"
+                            className={cn(buttonVariants({ size: "sm" }), "font-semibold")}>Upgrade plan</Link>
+                    </div>
+                  )}
+                </div>
+                {estimate.pages_included > 0 && (
+                  <div className="mt-4 grid grid-cols-3 gap-4 border-t border-hairline pt-4 font-mono">
+                    {([["This set", `${estimate.pages} pages`, "estimate-cell-set"],
+                       ["Left now", `${estimate.pages_remaining}`, "estimate-cell-now"],
+                       ["Left after", `${estimate.pages_after}`, "estimate-cell-after"]] as const).map(([l, v, id]) => (
+                      <div key={id}>
+                        <div className="text-[10px] uppercase tracking-[0.18em] text-ink-3">{l}</div>
+                        <div className="mt-0.5 text-lg font-semibold text-ink" data-testid={id}>{v}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <div>
               <div className="mb-3 flex items-center gap-2">
                 <ClipboardList className="h-4 w-4 text-brand" />
@@ -175,8 +249,12 @@ export default function UploadPage() {
                 <Input id="addr" data-testid="upload-address-input" value={address}
                        onChange={(e) => setAddress(e.target.value)} className="h-12 text-base" />
               </div>
-              <Button type="submit" size="lg" className="w-full font-semibold" data-testid="upload-submit-button" disabled={!file}>
-                {run.isPending ? (<><Loader2 className="h-4 w-4 animate-spin" /> Reading…</>) : "Read blueprint"}
+              <Button type="submit" size="lg" className="w-full font-semibold" data-testid="upload-submit-button"
+                      disabled={!file || estimating || (estimate ? !estimate.fits : false)}>
+                {run.isPending ? (<><Loader2 className="h-4 w-4 animate-spin" /> Reading…</>)
+                  : estimate && !estimate.fits ? "Not enough pages left"
+                  : estimate ? `Read ${estimate.pages} page${estimate.pages === 1 ? "" : "s"}`
+                  : "Read blueprint"}
               </Button>
               <p className="text-center text-sm text-ink-3">
                 You approve every line before anything becomes a quote.

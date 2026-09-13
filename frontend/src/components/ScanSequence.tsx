@@ -93,7 +93,7 @@ export default function ScanSequence({
   return (
     <div
       data-testid="scan-sequence"
-      className="overflow-hidden border border-hairline bg-base-2"
+      className="overflow-hidden border border-hairline bg-canvas-2"
     >
       {/* readout header */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hairline bg-surface px-4 py-2.5">
@@ -163,7 +163,7 @@ export default function ScanSequence({
           </svg>
 
           {/* scale chip */}
-          <div className="absolute bottom-3 left-3 flex items-center gap-2 border border-hairline bg-base-2/90 px-2.5 py-1.5">
+          <div className="absolute bottom-3 left-3 flex items-center gap-2 border border-hairline bg-canvas-2/90 px-2.5 py-1.5">
             <span className="font-mono text-[10px] uppercase tracking-widest text-ink-3">Scale</span>
             <span
               data-testid="scan-scale"

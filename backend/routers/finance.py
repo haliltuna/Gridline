@@ -15,10 +15,11 @@ from lib.pdf import quote_pdf
 from lib.pricing import (
     CAP_CHANGE_ORDER, CAP_COSTING, CAP_EXPORT, CAP_INVOICE, CAP_QUOTE, COMPETITORS,
     COST_BREAKDOWN, OVERAGE_PER_PAGE, PAGE_COST, PLANS as PLAN_DICTS, TARGET_MARGIN,
-    has_cap, plan_for, upgrade_message,
+    TOP_UPS, has_cap, plan_for, upgrade_message,
 )
 from models.billing import (
-    CompetitorRow, CostLine, CostModel, CostingOverview, CostingRow, PlanTier, Usage,
+    CompetitorRow, CostLine, CostModel, CostingOverview, CostingRow, PlanTier, ThemeIn,
+    TopUpPack, Usage,
 )
 from models.schemas import (
     CheckoutIn, CheckoutOut, DashboardStats, Expense, ExpenseIn, Invoice, JobCosting,
@@ -523,17 +524,35 @@ async def billing_usage(user: dict = Depends(require("settings:read"))):
     pages = sum(int(j.get("pages_read") or j.get("pages") or 0) for j in jobs)
     seats = await db.users.count_documents({"$or": [{"id": acct}, {"account_id": acct}]})
     included = plan["pages_included"]
-    remaining = max(0, included - pages) if included >= 0 else -1
+    credits = int(doc.get("page_credits", 0))
+    total_allow = included + credits if included >= 0 else -1
+    remaining = max(0, total_allow - pages) if total_allow >= 0 else -1
     return Usage(
         plan_id=plan["id"], plan_name=plan["name"], period=doc.get("plan_period", "annual"),
-        pages_included=included, pages_used=pages, pages_remaining=remaining,
-        limit_reached=included >= 0 and pages >= included,
-        near_limit=included > 0 and pages >= included * 0.8,
+        pages_included=included, page_credits=credits, pages_used=pages,
+        pages_remaining=remaining,
+        limit_reached=total_allow >= 0 and pages >= total_allow,
+        near_limit=total_allow > 0 and pages >= total_allow * 0.8,
         jobs_included=plan["jobs_included"],
         jobs_used=len(jobs), max_file_mb=plan["max_file_mb"], overage_pages=0,
         overage_cost=0.0,
         capabilities=plan["capabilities"], seat_count=plan["seat_count"], seats_used=seats,
     )
+
+
+@router.get("/billing/top-ups", response_model=list[TopUpPack])
+async def billing_top_ups():
+    """One-off page packs — bought only when a set overruns, never auto-renewed."""
+    return [TopUpPack(**t) for t in TOP_UPS]
+
+
+@router.patch("/me/theme", response_model=ThemeIn)
+async def set_theme(body: ThemeIn, user: dict = Depends(current_user)):
+    """Theme is stored on the user so it follows them onto any device."""
+    if body.theme not in ("readout", "blueprint", "daylight"):
+        raise HTTPException(status_code=400, detail="Unknown theme")
+    await db.users.update_one({"id": user["id"]}, {"$set": {"theme": body.theme}})
+    return ThemeIn(theme=body.theme)
 
 
 @router.post("/billing/checkout", response_model=CheckoutOut)

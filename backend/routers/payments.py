@@ -19,7 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from lib.authz import account_id, require
 from lib.db import db
-from lib.pricing import BY_ID
+from lib.pricing import BY_ID, TOP_UP_BY_ID
 from models.billing import CheckoutIn, CheckoutSession, PaymentStatus
 
 logger = logging.getLogger(__name__)
@@ -41,7 +41,13 @@ async def _record(session_id: str) -> dict | None:
 async def _fulfil(record: dict) -> None:
     """Idempotent: only ever runs once per session thanks to the payment_status guard."""
     kind = record.get("kind")
-    if kind == "plan":
+    if kind == "topup":
+        # Page credits sit outside the plan allowance and never expire.
+        await db.users.update_one(
+            {"id": record["account_id"]},
+            {"$inc": {"page_credits": int(record.get("pages", 0))}},
+        )
+    elif kind == "plan":
         await db.users.update_one(
             {"id": record["account_id"]},
             {"$set": {"plan": record["plan_id"], "plan_period": record.get("period", "annual"),
@@ -85,6 +91,26 @@ def _price_for(lookup_key: str):
 # ---------- plan checkout (authenticated, owner only) ----------
 @router.post("/payments/checkout", response_model=CheckoutSession)
 async def create_plan_checkout(body: CheckoutIn, user: dict = Depends(require("billing:write"))):
+    pack = TOP_UP_BY_ID.get(body.plan_id)
+    if pack:
+        price = _price_for(pack["lookup_key"])
+        origin = body.origin_url.rstrip("/")
+        session = stripe.checkout.Session.create(
+            line_items=[{"price": price.id, "quantity": 1}], mode="payment",
+            success_url=f"{origin}/payment/success?session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{origin}/payment/cancel",
+            metadata={"kind": "topup", "pack_id": pack["id"], "account_id": account_id(user)},
+        )
+        await db.payment_transactions.insert_one({
+            "session_id": session.id, "kind": "topup", "plan_id": pack["id"], "period": "",
+            "account_id": account_id(user), "invoice_id": None, "pages": pack["pages"],
+            "amount": pack["price"], "currency": "usd",
+            "status": "initiated", "payment_status": "pending",
+            "created_at": datetime.now(timezone.utc), "updated_at": datetime.now(timezone.utc),
+        })
+        return CheckoutSession(checkout_url=session.url or "", session_id=session.id,
+                               amount=pack["price"], mocked=False)
+
     plan = BY_ID.get(body.plan_id)
     if not plan or plan["kind"] not in ("subscription", "one_time"):
         raise HTTPException(status_code=400, detail="That plan cannot be bought online")

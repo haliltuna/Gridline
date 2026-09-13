@@ -49,9 +49,9 @@ export default function LandingV2() {
   });
 
   return (
-    <div className="min-h-screen bg-base text-ink">
+    <div className="min-h-screen bg-canvas text-ink">
       {/* top ticker instead of a nav bar full of links */}
-      <div className="overflow-hidden border-b border-hairline/70 bg-base-2">
+      <div className="overflow-hidden border-b border-hairline/70 bg-canvas-2">
         <div className="mx-auto flex max-w-[1240px] items-center justify-between gap-6 px-6 py-3 font-mono text-[11px] uppercase tracking-[0.22em] text-ink-3">
           <span className="text-brand">Gridline / takeoff engine</span>
           <span className="hidden md:inline">Opus vision · 200 DPI · 12 floor types · waste + adhesive logic</span>
@@ -98,7 +98,7 @@ export default function LandingV2() {
       </section>
 
       {/* numbered rail */}
-      <section className="border-y border-hairline/70 bg-base-2">
+      <section className="border-y border-hairline/70 bg-canvas-2">
         <div className="mx-auto max-w-[1240px] px-6 py-20">
           {[
             ["01", "Drop the set", "Drag in the PDF. 100+ pages and separate spec sheets are normal, not an edge case."],
@@ -128,11 +128,11 @@ export default function LandingV2() {
               Allowances are sized around that, so the price holds whether you bid one job or two hundred.
             </p>
           </div>
-          <div className="inline-flex border border-hairline bg-base-2 p-1" data-testid="v2-pricing-toggle">
+          <div className="inline-flex border border-hairline bg-canvas-2 p-1" data-testid="v2-pricing-toggle">
             {([["annual", "Annual −20%"], ["monthly", "Monthly"]] as const).map(([k, label]) => (
               <button key={k} type="button" data-testid={`v2-toggle-${k}`} onClick={() => setAnnual(k === "annual")}
                       className={cn("px-4 py-2 font-mono text-[11px] uppercase tracking-[0.18em] transition-colors duration-150",
-                        (k === "annual") === annual ? "bg-brand text-base" : "text-ink-3 hover:text-ink-2")}>
+                        (k === "annual") === annual ? "bg-brand text-on-brand" : "text-ink-3 hover:text-ink-2")}>
                 {label}
               </button>
             ))}
@@ -194,7 +194,7 @@ export default function LandingV2() {
       </section>
 
       {/* single-field demo capture */}
-      <section id="v2-demo" className="border-t border-hairline/70 bg-base-2">
+      <section id="v2-demo" className="border-t border-hairline/70 bg-canvas-2">
         <div className="mx-auto flex max-w-[1240px] flex-col gap-6 px-6 py-20 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h2 className="font-heading text-4xl font-bold tracking-tight text-ink">Send us your worst set</h2>

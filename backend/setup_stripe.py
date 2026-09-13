@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 stripe.api_key = os.environ["STRIPE_SECRET_KEY"]
 
-from lib.pricing import PLANS  # noqa: E402  (after api_key so a bad key fails fast)
+from lib.pricing import PLANS, TOP_UPS  # noqa: E402  (after api_key so a bad key fails fast)
 
 SAAS_TAX_CODE = "txcd_10103001"
 
@@ -36,6 +36,12 @@ def catalog() -> list[dict]:
         entries.append({"emergent_product_id": f"gridline_{plan['id']}",
                         "name": f"Gridline {plan['name']}", "tax_code": SAAS_TAX_CODE,
                         "prices": prices})
+    for pack in TOP_UPS:
+        entries.append({"emergent_product_id": f"gridline_{pack['id']}",
+                        "name": f"Gridline {pack['name']}", "tax_code": SAAS_TAX_CODE,
+                        "prices": [{"lookup_key": pack["lookup_key"],
+                                    "amount": int(round(pack["price"] * 100)),
+                                    "currency": "usd"}]})
     return entries
 
 

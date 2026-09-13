@@ -30,6 +30,8 @@ class User(BaseModel):
     plan: str = "trial"
     role: str = "owner"
     account_id: str | None = None
+    theme: str = "readout"
+    page_credits: int = 0
     created_at: datetime
 
 

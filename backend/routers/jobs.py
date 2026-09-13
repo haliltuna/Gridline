@@ -8,6 +8,7 @@ from lib.authz import account_id, require
 from lib.db import db
 from lib.flooring import adhesive_gallons, defaults_for
 from lib.pricing import plan_for
+from models.billing import PageEstimate
 from models.schemas import Job, JobIn, LineCreate, LineUpdate, TakeoffLine
 
 router = APIRouter(tags=["jobs"])
@@ -52,6 +53,53 @@ async def delete_job(job_id: str, user: dict = Depends(require("job:delete"))):
     return {"ok": True}
 
 
+@router.post("/jobs/estimate", response_model=PageEstimate)
+async def estimate_blueprint(file: UploadFile = File(...), user: dict = Depends(require("job:write"))):
+    """Count the set and show what it will consume BEFORE any AI money is spent."""
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Empty file")
+    try:
+        import pymupdf
+
+        pages = pymupdf.open(stream=raw, filetype="pdf").page_count
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"Could not read that PDF: {exc}") from exc
+
+    acct = account_id(user)
+    doc = await db.users.find_one({"id": acct}, {"_id": 0}) or {}
+    plan = plan_for(doc.get("plan"))
+    credits = int(doc.get("page_credits", 0))
+    size_mb = round(len(raw) / (1024 * 1024), 1)
+
+    if plan["pages_included"] < 0:
+        return PageEstimate(filename=file.filename or "blueprint.pdf", pages=pages, size_mb=size_mb,
+                            plan_name=plan["name"], pages_included=-1, pages_remaining=-1,
+                            pages_after=-1, fits=True,
+                            reason=f"{pages} pages · pooled volume on {plan['name']}.")
+
+    start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    window = {"$gte": start} if plan["kind"] in ("subscription", "trial") else {"$gte": datetime(2000, 1, 1, tzinfo=timezone.utc)}
+    prior = await db.jobs.find({"user_id": acct, "created_at": window},
+                               {"_id": 0, "pages": 1, "pages_read": 1}).to_list(2000)
+    used = sum(int(j.get("pages_read") or j.get("pages") or 0) for j in prior)
+    allowance = plan["pages_included"] + credits
+    remaining = max(0, allowance - used)
+    fits = pages <= remaining and size_mb <= plan["max_file_mb"]
+    if size_mb > plan["max_file_mb"]:
+        reason = f"{size_mb} MB exceeds the {plan['max_file_mb']} MB file limit on {plan['name']}."
+    elif fits:
+        reason = (f"{pages} pages will use {pages} of your {remaining} remaining "
+                  f"{plan['name']} pages, leaving {remaining - pages}.")
+    else:
+        reason = (f"{pages} pages but only {remaining} left on {plan['name']} — buy a page "
+                  f"top-up or upgrade before reading this set.")
+    return PageEstimate(filename=file.filename or "blueprint.pdf", pages=pages, size_mb=size_mb,
+                        plan_name=plan["name"], pages_included=allowance,
+                        pages_remaining=remaining, pages_after=max(0, remaining - pages),
+                        fits=fits, reason=reason)
+
+
 @router.post("/jobs/{job_id}/upload", response_model=Job)
 async def upload_blueprint(job_id: str, file: UploadFile = File(...), user: dict = Depends(require("job:write"))):
     job = await _job_or_404(job_id, account_id(user))
@@ -87,7 +135,8 @@ async def upload_blueprint(job_id: str, file: UploadFile = File(...), user: dict
         prior = await db.jobs.find({"user_id": account_id(user), "created_at": window},
                                    {"_id": 0, "pages": 1, "pages_read": 1, "id": 1}).to_list(2000)
         used_pages = sum(int(j.get("pages_read") or j.get("pages") or 0) for j in prior if j["id"] != job_id)
-        remaining = plan["pages_included"] - used_pages
+        credits = int(acct_doc.get("page_credits", 0))
+        remaining = plan["pages_included"] + credits - used_pages
         # Count the incoming set BEFORE spending a single Opus call: there is no overage
         # billing, so a set that does not fit is refused rather than partly paid for by us.
         try:
@@ -99,12 +148,12 @@ async def upload_blueprint(job_id: str, file: UploadFile = File(...), user: dict
         if remaining <= 0:
             raise HTTPException(status_code=402, detail=(
                 f"{plan['name']} includes {plan['pages_included']} blueprint pages per period and you "
-                f"have used all {used_pages}. Upgrade on the Billing page to read another set."))
+                f"have used all {used_pages}. Buy a page top-up or upgrade on the Billing page."))
         if incoming > remaining:
             raise HTTPException(status_code=402, detail=(
-                f"That set is {incoming} pages but only {remaining} of your {plan['pages_included']} "
-                f"{plan['name']} pages are left this period. Upgrade on the Billing page, or upload a "
-                f"smaller portion of the set."))
+                f"That set is {incoming} pages but only {remaining} of your "
+                f"{plan['pages_included'] + credits} {plan['name']} pages are left this period. "
+                f"Buy a 25-page top-up on the Billing page, upgrade, or upload part of the set."))
 
     try:
         result = await read_blueprint(raw, file.filename or "blueprint.pdf")

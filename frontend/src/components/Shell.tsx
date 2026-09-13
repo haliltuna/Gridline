@@ -55,7 +55,7 @@ export default function Shell({ children, title, subtitle, action }: {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-40 border-b border-hairline/80 bg-base/90 backdrop-blur">
+      <header className="sticky top-0 z-40 border-b border-hairline/80 bg-canvas/90 backdrop-blur">
         <div className="mx-auto flex max-w-[1400px] items-center gap-6 px-5 py-3">
           <Link to="/dashboard" data-testid="shell-logo-link"><Logo /></Link>
           <nav className="flex flex-1 flex-wrap items-center gap-1">

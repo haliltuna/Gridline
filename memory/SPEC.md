@@ -48,10 +48,9 @@ pages we have not been paid for and the customer never gets a surprise charge.
 | Tier | Price | Pages | Jobs | Seats | Max PDF | COGS at full use | Capabilities |
 |---|---|---|---|---|---|---|---|
 | Trial (14 days) | free | 10 | 1 | 1 | 60 MB | $1.15 | takeoff, pdf, quote |
-| Single Takeoff | $49 one-off | 25 total | 1 | 1 | 80 MB | $2.88 (94% margin) | takeoff, pdf ONLY |
-| Crew | $149/mo annual ($186 monthly) | 60/mo | 3/mo | 2 | 120 MB | $6.90 (95%) | + quote, invoice, change orders |
-| Contractor Pro | $249/mo annual ($311) | 100/mo | unlimited | 5 | 200 MB | $11.50 (95%) | + costing, export, templates |
-| Agency | $499/mo annual ($624) | 250/mo | unlimited | 15 | 300 MB | $28.75 (94%) | + API |
+| Single Job | $39 one-off | 25 total | 1 | 1 | 80 MB | $2.88 | takeoff, pdf ONLY |
+| Job Pack 5 | $99/mo | 60/mo | 5/mo | 2 | 120 MB | $6.90 | + quote, invoice, change orders |
+| Unlimited Pro | $999/mo (14-day trial) | unlimited | unlimited | 5 | 300 MB | usage-based | + costing, export, templates |
 | Enterprise | custom | pooled | unlimited | unlimited | 500 MB | negotiated | everything |
 
 Enforcement: routers/jobs.py counts the incoming PDF's pages with PyMuPDF BEFORE any AI call
@@ -123,3 +122,6 @@ Harborview quoted, Linden Row paid), 18 takeoff lines, 2 quotes, 1 paid invoice,
 competitor panel). `/v2` = variant 2 (editorial type-led hero, numbered rail, pricing MATRIX,
 single-field demo capture). Both read the same /api/billing endpoints; pick one and delete the
 other when decided.
+
+## Theming note (2026-09)
+`--color-base` was renamed to `--color-canvas` in index.css: it made Tailwind's `text-base` resolve to a near-black COLOR utility instead of a font size, which hid typed input text on dark themes. Use `bg-canvas` / `bg-canvas-2`; never re-add a `--color-base` token.

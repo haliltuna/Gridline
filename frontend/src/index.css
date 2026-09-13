@@ -6,6 +6,16 @@
 @import "@fontsource-variable/jetbrains-mono";
 @import "@fontsource-variable/archivo";
 @import "@fontsource-variable/inter-tight";
+@import "@fontsource-variable/syne";
+@import "@fontsource-variable/instrument-sans";
+@import "@fontsource-variable/sora";
+@import "@fontsource/chakra-petch/400.css";
+@import "@fontsource/chakra-petch/600.css";
+@import "@fontsource/chakra-petch/700.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/600.css";
+@import "@fontsource/space-mono/400.css";
+@import "@fontsource/space-mono/700.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -16,8 +26,8 @@
     --font-sans: var(--f-sans);
     --font-mono: var(--f-mono);
 
-    --color-base: var(--t-base);
-    --color-base-2: var(--t-base-2);
+    --color-canvas: var(--t-base);
+    --color-canvas-2: var(--t-base-2);
     --color-surface: var(--t-surface);
     --color-surface-2: var(--t-surface-2);
     --color-hairline: var(--t-hairline);
@@ -72,8 +82,8 @@
 /* ---------- THEME 1: Readout (default) — near-black + neon yellow ---------- */
 :root,
 [data-theme="readout"] {
-    --f-heading: 'Space Grotesk Variable', sans-serif;
-    --f-sans: 'DM Sans Variable', sans-serif;
+    --f-heading: 'Chakra Petch', 'Space Grotesk Variable', sans-serif;
+    --f-sans: 'Sora Variable', 'DM Sans Variable', sans-serif;
     --f-mono: 'JetBrains Mono Variable', monospace;
 
     --t-base: #090D12;
@@ -127,9 +137,9 @@
 
 /* ---------- THEME 2: Blueprint — deep indigo + cyan drafting ink ---------- */
 [data-theme="blueprint"] {
-    --f-heading: 'Archivo Variable', sans-serif;
+    --f-heading: 'Syne Variable', 'Archivo Variable', sans-serif;
     --f-sans: 'Inter Tight Variable', sans-serif;
-    --f-mono: 'JetBrains Mono Variable', monospace;
+    --f-mono: 'IBM Plex Mono', monospace;
 
     --t-base: #060A16;
     --t-base-2: #080F22;
@@ -183,8 +193,8 @@
 /* ---------- THEME 3: Daylight — paper-white jobsite print + ink blue ---------- */
 [data-theme="daylight"] {
     --f-heading: 'Archivo Variable', sans-serif;
-    --f-sans: 'DM Sans Variable', sans-serif;
-    --f-mono: 'JetBrains Mono Variable', monospace;
+    --f-sans: 'Instrument Sans Variable', sans-serif;
+    --f-mono: 'Space Mono', monospace;
 
     --t-base: #F3F4EF;
     --t-base-2: #EAEBE4;
@@ -236,8 +246,38 @@
 }
 
 @layer base {
+  /* Filled brand surfaces always carry the on-brand ink — never white on yellow. */
+  [data-slot="button"].bg-primary,
+  .bg-brand:not(.bg-brand-soft) {
+    color: var(--t-on-brand);
+    }
+
   * {
     @apply border-border outline-ring/50;
+    }
+  /* Typed text must always carry the theme ink — inputs inherit from odd
+     ancestors otherwise, and browser autofill repaints white-on-white. */
+  input, textarea, select {
+    color: var(--t-ink);
+    caret-color: var(--t-brand);
+    }
+  input::placeholder, textarea::placeholder {
+    color: var(--t-ink-4);
+    opacity: 1;
+    }
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  textarea:-webkit-autofill,
+  select:-webkit-autofill {
+    -webkit-text-fill-color: var(--t-ink);
+    caret-color: var(--t-brand);
+    -webkit-box-shadow: 0 0 0 1000px var(--t-surface-2) inset;
+    box-shadow: 0 0 0 1000px var(--t-surface-2) inset;
+    }
+  [data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"] {
+    background-color: var(--t-surface-2);
+    color: var(--t-ink);
     }
   body {
     @apply bg-background text-foreground;
