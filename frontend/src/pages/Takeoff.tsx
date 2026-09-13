@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   AlertTriangle, Check, Plus, Trash2, FileSignature, Send, Ruler, ClipboardList,
-  Copy, GitCompare, FileDown, Sliders, Layers, Link2,
+  Copy, GitCompare, FileDown, Sliders, Layers, Link2, Repeat,
 } from "lucide-react";
 import { apiDelete, apiGet, apiPatch, apiPost, ApiError } from "@/lib/api";
 import { uploadFile } from "@/lib/session";
@@ -236,6 +236,18 @@ export default function Takeoff() {
             {job.data?.cross_check_note && (
               <p className="mt-3 text-sm text-ink-3" data-testid="takeoff-crosscheck">{job.data.cross_check_note}</p>
             )}
+            {job.data?.index_variance && (
+              <p className="mt-3 border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-sm text-sky-200"
+                 data-testid="takeoff-index-variance">
+                Index sheet vs measured — {job.data.index_variance}
+              </p>
+            )}
+            {((job.data?.doors ?? 0) > 0 || (job.data?.steps ?? 0) > 0) && (
+              <p className="mt-3 font-mono text-sm text-ink-3" data-testid="takeoff-accessory-counts">
+                Counted from the plans: {job.data?.doors ?? 0} door opening(s) → transition strips ·{" "}
+                {job.data?.steps ?? 0} step(s) → stair nosings
+              </p>
+            )}
             {job.data?.scale && (
               <p className="mt-3 inline-flex items-center gap-2 font-mono text-sm text-ink-3">
                 <Ruler className="h-4 w-4 text-brand" /> Printed scale: {job.data.scale}
@@ -434,11 +446,11 @@ export default function Takeoff() {
                     <th className="px-4 py-3">Room</th>
                     <th className="px-3 py-3">Scope</th>
                     <th className="px-4 py-3">Floor / item</th>
-                    <th className="px-3 py-3 text-right">Sq ft</th>
+                    <th className="px-3 py-3 text-right">Sq ft / qty</th>
                     <th className="px-3 py-3 text-right">Waste %</th>
                     {advanced && <th className="px-4 py-3">Adhesive</th>}
                     {advanced && <th className="px-3 py-3 text-right">Gal</th>}
-                    <th className="px-3 py-3 text-right">$/sf</th>
+                    <th className="px-3 py-3 text-right">$/sf or ea</th>
                     <th className="px-3 py-3 text-right">Labor hr</th>
                     <th className="px-3 py-3 text-right">Cost</th>
                     <th className="px-3 py-3" />
@@ -447,12 +459,24 @@ export default function Takeoff() {
                 <tbody>
                   {items.map((l) => {
                     const misc = l.scope === "misc";
+                    const acc = l.scope === "accessory";
                     return (
                       <tr key={l.id} data-testid={`line-row-${l.id}`}
                           className={cn("border-b border-hairline/60 align-middle", l.needs_review && "bg-amber-500/5")}>
                         <td className="px-4 py-3">
                           <div className="text-base font-medium text-ink" data-testid={`line-room-${l.id}`}>{l.room}</div>
                           {l.product && <div className="mt-0.5 max-w-[220px] truncate font-mono text-[11px] text-brand" data-testid={`line-product-${l.id}`}>{l.product}</div>}
+                          {l.product_alt && canEdit && (
+                            <button
+                              type="button"
+                              data-testid={`line-alt-swap-${l.id}`}
+                              title={`Swap to ${l.product_alt}`}
+                              onClick={() => patch.mutate({ id: l.id, body: { product: l.product_alt, product_alt: l.product } })}
+                              className="mt-1 inline-flex max-w-[220px] items-center gap-1 truncate border border-hairline px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-ink-3 transition-colors hover:border-brand/50 hover:text-brand"
+                            >
+                              <Repeat className="h-3 w-3 shrink-0" /> alt: {l.product_alt}
+                            </button>
+                          )}
                           {l.needs_review && (
                             <span className="mt-1 inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-wider text-amber-300">
                               <AlertTriangle className="h-3 w-3" /> review
@@ -473,7 +497,11 @@ export default function Takeoff() {
                           )}
                         </td>
                         <td className="px-4 py-3">
-                          {misc ? (
+                          {acc ? (
+                            <span className="font-mono text-xs uppercase tracking-wider text-ink-3" data-testid={`line-floortype-${l.id}`}>
+                              counted pieces
+                            </span>
+                          ) : misc ? (
                             <span className="font-mono text-xs uppercase tracking-wider text-ink-3" data-testid={`line-floortype-${l.id}`}>flat price</span>
                           ) : canEdit ? (
                             <Select value={l.floor_type} onValueChange={(v: string) => patch.mutate({ id: l.id, body: { floor_type: v } })}>
@@ -487,11 +515,16 @@ export default function Takeoff() {
                           )}
                         </td>
                         <td className="px-3 py-3">
-                          <EditNum testId={`line-sqft-${l.id}`} value={l.sqft} disabled={misc || !canEdit}
-                                   onCommit={(v) => patch.mutate({ id: l.id, body: { sqft: v } })} />
+                          {acc ? (
+                            <EditNum testId={`line-qty-${l.id}`} value={l.qty} disabled={!canEdit}
+                                     onCommit={(v) => patch.mutate({ id: l.id, body: { qty: v } })} />
+                          ) : (
+                            <EditNum testId={`line-sqft-${l.id}`} value={l.sqft} disabled={misc || !canEdit}
+                                     onCommit={(v) => patch.mutate({ id: l.id, body: { sqft: v } })} />
+                          )}
                         </td>
                         <td className="px-3 py-3">
-                          <EditNum testId={`line-waste-${l.id}`} value={l.waste_pct} suffix="%" disabled={misc || !canEdit}
+                          <EditNum testId={`line-waste-${l.id}`} value={l.waste_pct} suffix="%" disabled={misc || acc || !canEdit}
                                    onCommit={(v) => patch.mutate({ id: l.id, body: { waste_pct: v } })} />
                         </td>
                         {advanced && (
@@ -503,11 +536,16 @@ export default function Takeoff() {
                           </td>
                         )}
                         <td className="px-3 py-3">
-                          <EditNum testId={`line-rate-${l.id}`} value={l.material_cost_per_sqft} disabled={misc || l.scope === "install_only" || !canEdit}
-                                   onCommit={(v) => patch.mutate({ id: l.id, body: { material_cost_per_sqft: v } })} />
+                          {acc ? (
+                            <EditNum testId={`line-unitprice-${l.id}`} value={l.unit_price} disabled={!canEdit}
+                                     onCommit={(v) => patch.mutate({ id: l.id, body: { unit_price: v } })} />
+                          ) : (
+                            <EditNum testId={`line-rate-${l.id}`} value={l.material_cost_per_sqft} disabled={misc || l.scope === "install_only" || !canEdit}
+                                     onCommit={(v) => patch.mutate({ id: l.id, body: { material_cost_per_sqft: v } })} />
+                          )}
                         </td>
                         <td className="px-3 py-3">
-                          <EditNum testId={`line-hours-${l.id}`} value={l.labor_hours} disabled={misc || l.scope === "supply_only" || !canEdit}
+                          <EditNum testId={`line-hours-${l.id}`} value={l.labor_hours} disabled={misc || (!acc && l.scope === "supply_only") || !canEdit}
                                    onCommit={(v) => patch.mutate({ id: l.id, body: { labor_hours: v } })} />
                         </td>
                         <td className="px-3 py-3">

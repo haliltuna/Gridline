@@ -157,13 +157,21 @@ def _line_table(lines: list[dict], t: dict, s: dict, show_product: bool) -> Tabl
         elif line.get("adhesive"):
             desc = f"{desc}<br/><font size=7>{line['adhesive']}</font>"
         misc = line.get("scope") == "misc"
+        acc = line.get("scope") == "accessory"
         scope_text = "Misc." if misc else scope_label(line.get("scope", "supply_install")).replace(" (labor)", "").replace(" (material)", "")
+        if acc:
+            # Counted trim work reads as "4 @ $18.00 ea" in the SF / waste columns.
+            qty_text = f"{float(line.get('qty', 0)):,.0f} ea"
+            waste_text = f"@ {_money(float(line.get('unit_price', 0)))}"
+        else:
+            qty_text = "—" if misc else f"{float(line.get('sqft', 0)):,.0f}"
+            waste_text = "—" if misc else f"{float(line.get('waste_pct', 0)):,.0f}%"
         rows.append([
             Paragraph(str(line.get("room", "")), s["cell"]),
             Paragraph(scope_text, s["cell"]),
             Paragraph(desc, s["cell"]),
-            Paragraph("—" if misc else f"{float(line.get('sqft', 0)):,.0f}", s["num"]),
-            Paragraph("—" if misc else f"{float(line.get('waste_pct', 0)):,.0f}%", s["num"]),
+            Paragraph(qty_text, s["num"]),
+            Paragraph(waste_text, s["num"]),
             Paragraph("—" if misc else f"{float(line.get('labor_hours', 0)):,.1f}", s["num"]),
             Paragraph(_money(float(line.get("cost", 0))), s["num"]),
         ])

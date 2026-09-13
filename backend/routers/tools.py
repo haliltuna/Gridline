@@ -12,6 +12,7 @@ from lib.db import db
 from lib.flooring import FLOOR_TYPE_NAMES, MISC_PRESETS, SCOPES
 from lib.pdf import DEFAULT_TEMPLATE, TEMPLATES, quote_pdf, takeoff_pdf
 from models.schemas import (
+    SpecPricingIn,
     DiffLine, Job, QuoteDiff, SpecReadResult, TakeoffLine, UnitTemplate,
     UnitTemplateApplyIn, UnitTemplateLine, UnitTemplateSaveIn,
 )
@@ -263,3 +264,42 @@ async def download_invoice_pdf(invoice_id: str, template: str | None = None, use
 
 
 _ = uuid, datetime, timezone, Job
+
+
+@router.put("/jobs/{job_id}/specs/pricing", response_model=SpecReadResult)
+async def price_specs(job_id: str, body: SpecPricingIn, user: dict = Depends(require("takeoff:write"))):
+    """Price the flooring materials from the spec sheet before (or after) the blueprint is read.
+
+    Each item points at a spec by list index, carries the material price per sq ft the estimator
+    wants to use, and can flip that spec to its approved alternative product. When
+    `apply_to_lines` is on, the prices and product names are pushed onto every matching
+    takeoff line — which is what the quote and invoice snapshot later.
+    """
+    job = await _job_or_404(job_id, account_id(user))
+    specs = [sp for sp in (job.get("specs") or []) if isinstance(sp, dict)]
+    if not specs:
+        raise HTTPException(status_code=400, detail="This job has no spec sheet yet")
+
+    for item in body.items:
+        if not 0 <= item.index < len(specs):
+            raise HTTPException(status_code=400, detail=f"No spec at position {item.index}")
+        spec = specs[item.index]
+        if item.price_per_sqft is not None:
+            spec["price_per_sqft"] = float(item.price_per_sqft)
+        spec["use_alternative"] = bool(item.use_alternative)
+        if item.use_alternative and spec.get("alternative"):
+            # Swap in the approved alternative, keeping the original recoverable.
+            spec["product"], spec["alternative"] = spec["alternative"], spec.get("product", "")
+
+    await db.jobs.update_one({"id": job_id}, {"$set": {"specs": specs}})
+
+    applied = 0
+    if body.apply_to_lines:
+        lines = await db.takeoff_lines.find({"job_id": job_id}, {"_id": 0}).to_list(2000)
+        for line in lines:
+            patch = apply_specs_to_line(line, specs)
+            if patch:
+                await db.takeoff_lines.update_one({"id": line["id"]}, {"$set": patch})
+                applied += 1
+
+    return SpecReadResult(specs=specs, brief=job.get("spec_brief", ""), applied_to_lines=applied)

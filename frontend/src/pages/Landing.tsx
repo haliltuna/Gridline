@@ -16,25 +16,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Logo } from "@/components/Shell";
 import ThemeSwitcher from "@/components/ThemeSwitcher";
 import ScanSequence from "@/components/ScanSequence";
+import { CountUp, DepthSection, Parallax, Reveal, ScrollProgress } from "@/components/Scroll";
 import { cn } from "@/lib/utils";
 
 const FALLBACK_PLANS: PlanTier[] = [];
-
-function useCountUp(target: number, run: boolean) {
-  const [v, setV] = useState(0);
-  useEffect(() => {
-    if (!run) return;
-    let frame = 0;
-    const total = 48;
-    const id = setInterval(() => {
-      frame += 1;
-      setV(Math.round(target * Math.min(1, frame / total)));
-      if (frame >= total) clearInterval(id);
-    }, 18);
-    return () => clearInterval(id);
-  }, [target, run]);
-  return v;
-}
 
 function useInView<T extends HTMLElement>(threshold = 0.2) {
   const ref = useRef<T>(null);
@@ -49,32 +34,20 @@ function useInView<T extends HTMLElement>(threshold = 0.2) {
   return { ref, seen };
 }
 
-function Reveal({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
-  const { ref, seen } = useInView<HTMLDivElement>(0.15);
-  return (
-    <div ref={ref} style={{ animationDelay: `${delay}ms` }} className={seen ? "gl-rise" : "opacity-0"}>
-      {children}
-    </div>
-  );
-}
-
 function Stats() {
-  const { ref, seen } = useInView<HTMLDivElement>(0.3);
-  const pages = useCountUp(280, seen);
-  const mins = useCountUp(6, seen);
-  const types = useCountUp(12, seen);
-  const acc = useCountUp(98, seen);
   const items = [
-    { v: `${pages}+`, l: "Pages per set read" },
-    { v: `${mins} min`, l: "Blueprint to quote" },
-    { v: `${types}`, l: "Floor types covered" },
-    { v: `${acc}%`, l: "Dimension match rate" },
+    { to: 280, suffix: "+", l: "Pages per set read", id: "stat-pages" },
+    { to: 6, suffix: " min", l: "Blueprint to quote", id: "stat-minutes" },
+    { to: 12, suffix: "", l: "Floor types covered", id: "stat-types" },
+    { to: 98, suffix: "%", l: "Dimension match rate", id: "stat-accuracy" },
   ];
   return (
-    <div ref={ref} className="grid grid-cols-2 gap-px border border-hairline/80 bg-hairline/60 md:grid-cols-4" data-testid="landing-stats">
+    <div className="grid grid-cols-2 gap-px border border-hairline/80 bg-hairline/60 md:grid-cols-4" data-testid="landing-stats">
       {items.map((s) => (
         <div key={s.l} className="bg-surface px-6 py-8">
-          <div className="font-mono text-4xl font-semibold tracking-tight text-brand">{s.v}</div>
+          <div className="font-mono text-4xl font-semibold tracking-tight text-brand">
+            <CountUp to={s.to} suffix={s.suffix} testId={s.id} />
+          </div>
           <div className="mt-2 text-sm text-ink-3">{s.l}</div>
         </div>
       ))}
@@ -125,7 +98,7 @@ function RoiCalculator() {
   const [rate, setRate] = useState(65);
   const hoursSaved = Math.round(bids * hours * 0.8);
   const monthlySaving = hoursSaved * rate;
-  const net = monthlySaving - 199;
+  const net = monthlySaving - 99;
 
   return (
     <div className="grid gap-px border border-hairline/80 bg-hairline/60 lg:grid-cols-[1fr_0.9fr]" data-testid="roi-calculator">
@@ -158,7 +131,7 @@ function RoiCalculator() {
         <div className="mt-6 font-mono text-[11px] uppercase tracking-[0.2em] text-ink-3">That time is worth</div>
         <div className="mt-1 font-mono text-3xl font-semibold text-ink" data-testid="roi-value-saved">{money(monthlySaving)}</div>
         <div className="mt-6 border-t border-hairline pt-5">
-          <div className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink-3">Net of Crew at $199/mo</div>
+          <div className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink-3">Net of Job Pack 5 at $99/mo</div>
           <div className={cn("mt-1 font-mono text-3xl font-semibold", net >= 0 ? "text-brand" : "text-red-400")} data-testid="roi-net">
             {money(net)}
           </div>
@@ -239,6 +212,7 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen bg-canvas text-ink">
+      <ScrollProgress />
       <header className="sticky top-0 z-40 border-b border-hairline/80 bg-canvas/85 backdrop-blur">
         <div className="mx-auto flex max-w-[1200px] items-center justify-between px-5 py-4">
           <Logo />
@@ -254,7 +228,9 @@ export default function Landing() {
 
       {/* hero */}
       <section className="relative overflow-hidden border-b border-hairline/80">
-        <div className="gl-grid absolute inset-0 opacity-40" />
+        <Parallax distance={70} className="absolute inset-0">
+          <div className="gl-grid h-[130%] w-full opacity-40" />
+        </Parallax>
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-brand/50 to-transparent" />
         <div className="relative mx-auto grid max-w-[1200px] items-center gap-14 px-5 py-20 lg:grid-cols-[1.05fr_0.95fr] lg:py-28">
           <div className="gl-rise">
@@ -279,7 +255,7 @@ export default function Landing() {
             <p className="mt-4 font-mono text-xs text-ink-3">No card for the trial · Cancel any time</p>
           </div>
 
-          <div className="relative gl-rise" style={{ animationDelay: "140ms" }}>
+          <Parallax distance={38} className="relative gl-rise">
             <div className="relative overflow-hidden border border-hairline bg-surface shadow-2xl shadow-black/60">
               <div className="flex items-center justify-between border-b border-hairline px-4 py-3">
                 <span className="font-mono text-xs uppercase tracking-[0.2em] text-brand">LIVE READOUT</span>
@@ -314,14 +290,18 @@ export default function Landing() {
               </div>
               <div className="flex items-center justify-between border-t border-hairline bg-surface-2 px-4 py-3">
                 <span className="font-mono text-xs uppercase tracking-[0.2em] text-ink-3">Grand total</span>
-                <span className="font-mono text-xl font-semibold text-ink">$48,206.40</span>
+                <span className="font-mono text-xl font-semibold text-ink">
+                  <CountUp to={48206.4} prefix="$" decimals={2} testId="hero-grand-total" />
+                </span>
               </div>
             </div>
-          </div>
+          </Parallax>
         </div>
       </section>
 
-      <section className="mx-auto max-w-[1200px] px-5 py-16"><Reveal><Stats /></Reveal></section>
+      <section className="mx-auto max-w-[1200px] px-5 py-16">
+        <DepthSection testId="stats-depth"><Stats /></DepthSection>
+      </section>
 
       {/* total-recall scan demo */}
       <section className="border-y border-hairline/80 bg-canvas-2">
@@ -376,15 +356,13 @@ export default function Landing() {
             <div className="mt-8 border border-brand/40 bg-surface p-7" data-testid="landing-why-upgrade">
               <h3 className="font-heading text-2xl font-bold text-ink">So why upgrade at all?</h3>
               <p className="mt-4 max-w-3xl text-[16px] leading-relaxed text-ink-2">
-                Because the $49 one-off stops at the takeoff. Upgrading is what turns a measurement into
-                money: <strong className="text-ink">Crew</strong> ($149/mo annual) sends the quote as a
-                branded PDF, invoices it and collects by card, and keeps every change order as its own
-                revision. <strong className="text-ink">Contractor Pro</strong> ($249/mo) adds unlimited
-                jobs, bid-vs-actual costing so you see a job losing margin while you can still fix it,
-                unit templates that repeat one layout across 40 doors, and QuickBooks export.
-                <strong className="text-ink"> Agency</strong> ($499/mo) pools 250 pages across 15 seats
-                with roles. Per page you also pay less the higher you go — and the annual toggle takes
-                another 20% off.
+                Because the $39 Single Job stops at the takeoff. Upgrading is what turns a measurement
+                into money: <strong className="text-ink">Job Pack 5</strong> ($99/mo, up to 5 jobs) sends
+                the quote as a branded PDF, invoices it and collects by card, and keeps every change order
+                as its own revision. <strong className="text-ink">Unlimited Pro</strong> ($999/mo, 14-day
+                free trial) lifts every cap — unlimited uploads, buildings and jobs — and adds
+                bid-vs-actual costing so you see a job losing margin while you can still fix it, unit
+                templates that repeat one layout across 40 doors, and QuickBooks export.
               </p>
               <div className="mt-6 flex flex-wrap gap-3">
                 <a href="#pricing" data-testid="why-upgrade-pricing-link"
@@ -442,7 +420,9 @@ export default function Landing() {
       </section>
 
       {/* ROI */}
-      <section className="mx-auto max-w-[1200px] px-5 py-20"><Reveal><RoiCalculator /></Reveal></section>
+      <section className="mx-auto max-w-[1200px] px-5 py-20">
+        <DepthSection testId="roi-depth"><RoiCalculator /></DepthSection>
+      </section>
 
       {/* testimonials */}
       <section className="border-y border-hairline/80 bg-canvas-2">
@@ -588,7 +568,7 @@ export default function Landing() {
               Claude Opus reads every page at 200 DPI — accuracy over speed. Allowances start at 25 pages
               and there is no overage billing: when your pages run out the upload is refused with an
               upgrade prompt, so you never get a surprise invoice and we never read pages for free.
-              Quotes, invoicing and payments start at Crew; the $49 one-off is takeoff and PDF only.
+              Quotes, invoicing and payments start at Job Pack 5; the $39 Single Job is takeoff and PDF only.
             </p>
           </div>
           <div className="bg-surface-2 p-7">

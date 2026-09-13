@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
-from lib.ai import build_line, line_cost, read_blueprint
+from lib.ai import apply_specs_to_line, build_accessory_lines, build_line, index_variance, line_cost, read_blueprint
 from lib.authz import account_id, require
 from lib.db import db
 from lib.flooring import adhesive_gallons, defaults_for
@@ -155,8 +155,11 @@ async def upload_blueprint(job_id: str, file: UploadFile = File(...), user: dict
                 f"{plan['pages_included'] + credits} {plan['name']} pages are left this period. "
                 f"Buy a 25-page top-up on the Billing page, upgrade, or upload part of the set."))
 
+    # Spec-first: if a finish schedule was read before the drawings, its products ride along
+    # into the measuring pass so every room lands with the specified product already on it.
+    job_specs = [sp for sp in (job.get("specs") or []) if isinstance(sp, dict)]
     try:
-        result = await read_blueprint(raw, file.filename or "blueprint.pdf")
+        result = await read_blueprint(raw, file.filename or "blueprint.pdf", specs=job_specs)
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Could not read that PDF: {exc}") from exc
 
@@ -165,6 +168,11 @@ async def upload_blueprint(job_id: str, file: UploadFile = File(...), user: dict
 
     await db.takeoff_lines.delete_many({"job_id": job_id})
     lines = [build_line(r, job_id, labor_rate) for r in result["lines"]]
+    if job_specs:
+        for line in lines:
+            line.update(apply_specs_to_line(line, job_specs))
+    # Doors become transition strips, stair treads become nosings — counted, then priced.
+    lines += build_accessory_lines(result, job_id, labor_rate)
     if lines:
         await db.takeoff_lines.insert_many([dict(line) for line in lines])
 
@@ -182,6 +190,14 @@ async def upload_blueprint(job_id: str, file: UploadFile = File(...), user: dict
         "bathrooms": int(result.get("bathrooms") or 0),
         "stated_total_sqft": result.get("stated_total_sqft"),
         "cross_check_note": result.get("cross_check_note"),
+        "doors": int(result.get("doors") or sum(int(a.get("doors") or 0) for a in (result.get("accessories") or []) if isinstance(a, dict))),
+        "steps": int(result.get("steps") or sum(int(a.get("steps") or 0) for a in (result.get("accessories") or []) if isinstance(a, dict))),
+        "index_stated": result.get("index_stated") or {},
+        "index_variance": index_variance(
+            result,
+            round(sum(float(line.get("sqft") or 0) for line in lines), 2),
+            int(result.get("units") or 0),
+        ),
         "brief": result.get("brief") or "",
         "flags": [str(f) for f in (result.get("flags") or [])],
     }
@@ -220,6 +236,13 @@ async def update_line(line_id: str, body: LineUpdate, user: dict = Depends(requi
         # Miscellaneous work is a flat price — no area, waste, adhesive or derived labor.
         line.update({"floor_type": "", "sqft": 0.0, "waste_pct": 0.0, "adhesive": "",
                      "adhesive_gallons": 0.0, "material_cost_per_sqft": 0.0, "labor_hours": 0.0})
+        await db.takeoff_lines.update_one({"id": line_id}, {"$set": line})
+        return _with_cost(line)
+
+    if line.get("scope") == "accessory":
+        # Counted trim work: qty x unit price (+ its own install hours). No area or waste math.
+        line.update({"floor_type": "", "sqft": 0.0, "waste_pct": 0.0, "adhesive": "",
+                     "adhesive_gallons": 0.0, "material_cost_per_sqft": 0.0, "flat_cost": 0.0})
         await db.takeoff_lines.update_one({"id": line_id}, {"$set": line})
         return _with_cost(line)
 

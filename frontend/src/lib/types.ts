@@ -65,6 +65,10 @@ export interface Job {
   bathrooms: number;
   stated_total_sqft: number | null;
   cross_check_note: string | null;
+  doors: number;
+  steps: number;
+  index_stated: { buildings?: number | null; units?: number | null; total_sqft?: number | null; source?: string | null };
+  index_variance: string;
   brief: string;
   flags: string[];
   created_at: string;
@@ -79,7 +83,10 @@ export interface TakeoffLine {
   scope: string;
   floor_type: string;
   product: string;
+  product_alt: string;
   spec_note: string;
+  qty: number;
+  unit_price: number;
   sqft: number;
   waste_pct: number;
   adhesive: string;
@@ -100,6 +107,9 @@ export interface SpecEntry {
   surface: string;
   floor_type: string;
   product: string;
+  alternative?: string;
+  price_per_sqft?: number | null;
+  use_alternative?: boolean;
   adhesive: string | null;
   unit_type: string | null;
   note: string | null;
@@ -112,6 +122,17 @@ export interface SpecReadResult {
   engine: string;
   pages: number;
   applied_to_lines: number;
+}
+
+export interface SpecPriceItem {
+  index: number;
+  price_per_sqft: number | null;
+  use_alternative: boolean;
+}
+
+export interface SpecPricingIn {
+  items: SpecPriceItem[];
+  apply_to_lines: boolean;
 }
 
 export interface UnitTemplateLine {
@@ -228,6 +249,7 @@ export const SCOPE_LABELS: Record<string, string> = {
   install_only: "Install Only",
   supply_only: "Supply Only",
   misc: "Miscellaneous",
+  accessory: "Accessory (count)",
 };
 
 export const SCOPE_SHORT: Record<string, string> = {
@@ -235,6 +257,7 @@ export const SCOPE_SHORT: Record<string, string> = {
   install_only: "Install",
   supply_only: "Supply",
   misc: "Misc",
+  accessory: "Count",
 };
 
 export interface Quote {

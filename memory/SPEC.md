@@ -138,3 +138,26 @@ Two paths into the same httpOnly `gl_session` cookie + `sessions` collection:
    halilkocabiyikci@gmail.com lands on the `pro` plan, everyone else `trial`), stores the
    returned 7-day session_token in `sessions` and sets the cookie.
 Test guidance: /app/auth_testing.md (seed a sessions row; OAuth itself is not scriptable).
+
+## Spec-first quoting, counted trim work & landing motion (2026-09)
+- **Spec-first**: Upload.tsx can read the finish schedule BEFORE the drawings
+  (`spec-first-button` → POST /api/jobs/{id}/spec-sheet), then shows
+  `components/MaterialPricing.tsx` so the estimator sets material $/sq ft per specified product
+  and can flip any spec to its approved alternative
+  (PUT /api/jobs/{id}/specs/pricing → `SpecPricingIn`). The blueprint read
+  (`read_blueprint(..., specs=…)`) receives those products, so each room lands with the
+  specified product name already on it. Spec reads are flooring-scope only (paint, millwork,
+  casework etc. are ignored). Lines carry `product` + `product_alt`; the takeoff row has a
+  one-tap `line-alt-swap-{id}` button that swaps them.
+- **Nosings & transitions**: the AI counts door openings and stair treads
+  (`accessories`, `doors`, `steps`); `build_accessory_lines()` turns them into scope
+  `accessory` lines priced as qty x unit_price (+ install hours) from
+  `lib/flooring.ACCESSORIES`. Editable on the takeoff (`line-qty-*`, `line-unitprice-*`) and
+  rendered as "n ea @ $x" in the quote/invoice PDF.
+- **Index sheet cross-check**: `index_stated` (buildings/units/total sq ft printed on the
+  cover/index sheets) is recorded and `index_variance()` publishes the difference against
+  what was measured; shown on the takeoff as `takeoff-index-variance`.
+- **Landing motion**: `components/Scroll.tsx` (motion/react) provides ScrollProgress, Reveal,
+  Parallax, DepthSection and CountUp — all reduced-motion aware. Landing.tsx uses them for the
+  parallax hero grid/readout, count-up stats and depth on the stats/ROI blocks.
+- **Top bar** shows the Google avatar (`shell-user-avatar`) or initials plus the display name.

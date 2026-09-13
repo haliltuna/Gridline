@@ -11,7 +11,7 @@ from typing import Any
 
 import pypdfium2 as pdfium
 
-from lib.flooring import FLOOR_TYPE_NAMES, adhesive_gallons, defaults_for
+from lib.flooring import FLOOR_TYPE_NAMES, accessory_defaults, adhesive_gallons, defaults_for
 
 logger = logging.getLogger(__name__)
 
@@ -36,12 +36,30 @@ Group everything by building and unit. Count bedrooms and bathrooms per unit.
 If the drawing states a building or unit total area, cross-check your room sum against it
 and report the discrepancy.
 
+STEP 2b — COUNT THE TRIM WORK.
+Flooring bids are lost on the accessories, so COUNT them as well as measuring areas:
+ * doors: every door opening / doorway in the scope (each one needs a transition strip)
+ * steps: every stair tread / step (each one needs a stair nosing)
+ * stair_runs: number of separate stair runs
+Report them per unit in "accessories" AND as project totals. Count what you can actually see;
+if a sheet is unreadable say so in flags instead of guessing.
+
+STEP 2c — THE INDEX / COVER SHEET.
+The first few sheets of a set often state the project totals: number of buildings, number of
+units and total square footage. Record exactly what is printed in "index_stated" so we can
+show the difference between the drawing's own numbers and what was measured. Use null for
+anything not printed. Never copy a stated number into a room measurement.
+
 Return STRICT JSON only, no prose, no markdown fence:
 {{
  "scale": "printed scale e.g. 1/4\\" = 1'-0\\" or null",
  "project_type": "single-family | multi-family | commercial",
  "buildings": <int>, "units": <int>, "bedrooms": <int>, "bathrooms": <int>,
  "stated_total_sqft": <number or null>,
+ "index_stated": {{"buildings": <int or null>, "units": <int or null>,
+                  "total_sqft": <number or null>, "source": "sheet name/number or null"}},
+ "doors": <int total door openings>, "steps": <int total stair treads>,
+ "accessories": [{{"building":"Building A","unit":"Unit 101","doors":4,"steps":0,"note":null}}],
  "cross_check_note": "string or null",
  "flags": ["anything blurry/unreadable/assumed"],
  "brief": "2-3 sentence plain-English summary for the contractor",
@@ -95,7 +113,23 @@ def _extract_json(text: str) -> dict[str, Any]:
     return json.loads(text[start : end + 1])
 
 
-async def read_blueprint(pdf_bytes: bytes, filename: str) -> dict[str, Any]:
+def _spec_hint(specs: list[dict[str, Any]] | None) -> str:
+    """Spec-first: the finish schedule is read BEFORE the drawings, so the specified products
+    are handed to the measuring pass and land on each matching room as it is created."""
+    if not specs:
+        return ""
+    lines = []
+    for sp in specs[:60]:
+        alt = f" | approved alternative: {sp.get('alternative')}" if sp.get("alternative") else ""
+        lines.append(f"- {sp.get('room_pattern', 'ALL')} ({sp.get('surface', 'floor')}): "
+                     f"{sp.get('floor_type', '')} — {sp.get('product', '')}{alt}")
+    return ("\n\nTHE FINISH SCHEDULE FOR THIS SET HAS ALREADY BEEN READ. Use these products; "
+            "put the matching product name on each room's line and do NOT invent other products:\n"
+            + "\n".join(lines))
+
+
+async def read_blueprint(pdf_bytes: bytes, filename: str,
+                         specs: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     images, total_pages = render_pages(pdf_bytes)
     key = os.environ.get("EMERGENT_LLM_KEY", "")
     parsed: dict[str, Any] | None = None
@@ -113,6 +147,7 @@ async def read_blueprint(pdf_bytes: bytes, filename: str) -> dict[str, Any]:
                 text=(
                     f"Blueprint set '{filename}' — {total_pages} page(s), {len(images)} rendered here. "
                     "Produce the takeoff JSON exactly as specified."
+                    + _spec_hint(specs)
                 ),
                 file_contents=[ImageContent(image_base64=b) for b in images],
             )
@@ -158,6 +193,11 @@ def _fallback(filename: str, pages: int) -> dict[str, Any]:
         "bedrooms": 2,
         "bathrooms": 2,
         "stated_total_sqft": None,
+        "index_stated": {"buildings": None, "units": None, "total_sqft": None, "source": None},
+        "doors": 6,
+        "steps": 0,
+        "accessories": [{"building": "Building A", "unit": "Unit 101", "doors": 4, "steps": 0, "note": None},
+                        {"building": "Building A", "unit": "Unit 102", "doors": 2, "steps": 0, "note": None}],
         "cross_check_note": None,
         "specs": [],
         "flags": ["AI reader unavailable — starter takeoff generated. Verify every dimension before quoting."],
@@ -181,6 +221,11 @@ Extract every product-to-location mapping you can read. Typical sources: finish 
 room finish matrices, keynote legends, product data sheets, "FLOORING" spec sections.
 
 Rules:
+- FLOORING SCOPE ONLY. Take flooring, wall/backsplash tile, stair nosings, transitions, cove base,
+  underlayment and setting materials. IGNORE paint, wallcovering, millwork, casework, countertops,
+  plumbing and anything else outside the flooring subcontractor's scope.
+- If the schedule names an approved alternative / "or equal" product, record it in "alternative".
+- If a unit price is printed (per sq ft, per piece), record it in "price_per_sqft"; otherwise null.
 - Copy manufacturer, product name/series, colour and item code EXACTLY as printed. Never invent one.
 - room_pattern is the room or area the product applies to, as printed ("Kitchen", "Bathrooms",
   "All Unit Type A bedrooms", "Corridors", "Kitchen Backsplash"). Use "ALL" for a project-wide default.
@@ -197,6 +242,8 @@ Return STRICT JSON only, no prose or markdown fence:
  "specs": [
    {"room_pattern":"Kitchen Backsplash","surface":"wall","floor_type":"Ceramic Tile",
     "product":"Daltile Rittenhouse Square 3x6 Arctic White RS01",
+    "alternative":"approved equal as printed, else null",
+    "price_per_sqft": null,
     "adhesive":"White polymer-modified thin-set","unit_type":"Type A or null","note":null}
  ]
 }"""
@@ -274,8 +321,11 @@ def apply_specs_to_line(line: dict[str, Any], specs: list[dict[str, Any]]) -> di
         return {}
     patch: dict[str, Any] = {
         "product": best.get("product") or line.get("product") or "",
+        "product_alt": best.get("alternative") or "",
         "spec_note": best.get("note") or f"Specified for '{best.get('room_pattern')}'",
     }
+    if best.get("price_per_sqft"):
+        patch["material_cost_per_sqft"] = float(best["price_per_sqft"])
     ft = best.get("floor_type")
     if ft in FLOOR_TYPE_NAMES and line.get("scope") != "misc":
         patch["floor_type"] = ft
@@ -293,7 +343,7 @@ def apply_specs_to_line(line: dict[str, Any], specs: list[dict[str, Any]]) -> di
 
 def build_line(raw: dict[str, Any], job_id: str, labor_rate: float) -> dict[str, Any]:
     scope = raw.get("scope") or "supply_install"
-    if scope not in ("supply_install", "install_only", "supply_only", "misc"):
+    if scope not in ("supply_install", "install_only", "supply_only", "misc", "accessory"):
         scope = "supply_install"
     ft = raw.get("floor_type") or "Luxury Vinyl Plank"
     if ft not in FLOOR_TYPE_NAMES:
@@ -302,6 +352,33 @@ def build_line(raw: dict[str, Any], job_id: str, labor_rate: float) -> dict[str,
     sqft = float(raw.get("sqft") or 0) or round(float(raw.get("length_ft") or 0) * float(raw.get("width_ft") or 0), 1)
     waste = float(raw["waste_pct"]) if raw.get("waste_pct") is not None else float(d["waste"])
     total_sqft = round(sqft * (1 + waste / 100), 1)
+    qty = float(raw.get("qty") or 0)
+    unit_price = float(raw.get("unit_price") or 0)
+    if scope == "accessory":
+        # Counted trim work: qty pieces at a unit price, plus its own install minutes each.
+        return {
+            "id": str(uuid.uuid4()),
+            "job_id": job_id,
+            "building": raw.get("building") or "Building A",
+            "unit": raw.get("unit") or "Main",
+            "room": raw.get("room") or "Accessories",
+            "scope": "accessory",
+            "floor_type": "",
+            "product": raw.get("product") or "",
+            "product_alt": raw.get("product_alt") or "",
+            "spec_note": raw.get("spec_note") or "",
+            "sqft": 0.0, "waste_pct": 0.0, "adhesive": "", "adhesive_gallons": 0.0,
+            "material_cost_per_sqft": 0.0,
+            "qty": qty,
+            "unit_price": unit_price,
+            "labor_hours": float(raw.get("labor_hours") or 0),
+            "labor_rate": labor_rate,
+            "flat_cost": 0.0,
+            "needs_review": bool(raw.get("needs_review")),
+            "review_note": raw.get("review_note"),
+            "source": raw.get("source"),
+            "approved": False,
+        }
     return {
         "id": str(uuid.uuid4()),
         "job_id": job_id,
@@ -311,7 +388,10 @@ def build_line(raw: dict[str, Any], job_id: str, labor_rate: float) -> dict[str,
         "scope": scope,
         "floor_type": "" if scope == "misc" else ft,
         "product": raw.get("product") or "",
+        "product_alt": raw.get("product_alt") or "",
         "spec_note": raw.get("spec_note") or "",
+        "qty": 0.0,
+        "unit_price": 0.0,
         "sqft": 0.0 if scope == "misc" else sqft,
         "waste_pct": 0.0 if scope == "misc" else waste,
         "adhesive": "" if scope in ("misc", "install_only") else d["adhesive"],
@@ -332,6 +412,9 @@ def line_cost(line: dict[str, Any]) -> float:
     scope = line.get("scope", "supply_install")
     if scope == "misc":
         return round(float(line.get("flat_cost") or 0), 2)
+    if scope == "accessory":
+        pieces = float(line.get("qty") or 0) * float(line.get("unit_price") or 0)
+        return round(pieces + float(line.get("labor_hours") or 0) * float(line.get("labor_rate") or 0), 2)
     total_sqft = float(line["sqft"]) * (1 + float(line["waste_pct"]) / 100)
     material = total_sqft * float(line["material_cost_per_sqft"])
     labor = float(line["labor_hours"]) * float(line["labor_rate"])
@@ -340,3 +423,55 @@ def line_cost(line: dict[str, Any]) -> float:
     if scope == "supply_only":
         return round(material, 2)
     return round(material + labor, 2)
+
+
+def build_accessory_lines(parsed: dict[str, Any], job_id: str, labor_rate: float) -> list[dict[str, Any]]:
+    """Turn the AI's door and step counts into priced transition / nosing lines."""
+    groups = parsed.get("accessories") or []
+    if not groups:
+        totals = {"doors": int(parsed.get("doors") or 0), "steps": int(parsed.get("steps") or 0)}
+        if not any(totals.values()):
+            return []
+        groups = [{"building": "Building A", "unit": "Whole job", **totals}]
+    out: list[dict[str, Any]] = []
+    for g in groups:
+        if not isinstance(g, dict):
+            continue
+        for kind, key, room in (("transition", "doors", "Transition strips — door openings"),
+                                ("nosing", "steps", "Stair nosings — steps")):
+            qty = float(g.get(key) or 0)
+            if qty <= 0:
+                continue
+            d = accessory_defaults(kind)
+            out.append(build_line({
+                "building": g.get("building") or "Building A",
+                "unit": g.get("unit") or "Main",
+                "room": room,
+                "scope": "accessory",
+                "qty": qty,
+                "unit_price": float(d["unit_price"]),
+                "labor_hours": round(qty * float(d["labor_hr_each"]), 2),
+                "source": f"counted from the drawings ({int(qty)} {d['unit']}s)",
+                "review_note": g.get("note"),
+            }, job_id, labor_rate))
+    return out
+
+
+def index_variance(parsed: dict[str, Any], measured_sqft: float, measured_units: int) -> str:
+    """Compare the index/cover sheet's own stated totals against what we measured."""
+    stated = parsed.get("index_stated") or {}
+    bits: list[str] = []
+    s_units = stated.get("units")
+    s_sqft = stated.get("total_sqft") or parsed.get("stated_total_sqft")
+    if s_units:
+        delta = measured_units - int(s_units)
+        bits.append(f"index sheet states {int(s_units)} unit(s); we measured {measured_units}"
+                    + (f" ({delta:+d})" if delta else " — match"))
+    if s_sqft:
+        delta_sf = measured_sqft - float(s_sqft)
+        pct = (delta_sf / float(s_sqft) * 100) if float(s_sqft) else 0
+        bits.append(f"index sheet states {float(s_sqft):,.0f} sq ft; we measured {measured_sqft:,.0f}"
+                    f" ({delta_sf:+,.0f} sf, {pct:+.1f}%)")
+    if stated.get("source"):
+        bits.append(f"source: {stated['source']}")
+    return " · ".join(bits)

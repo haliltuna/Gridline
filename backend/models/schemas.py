@@ -162,6 +162,10 @@ class Job(BaseModel):
     specs: list[dict] = []
     spec_filename: str = ""
     spec_brief: str = ""
+    doors: int = 0
+    steps: int = 0
+    index_stated: dict = {}
+    index_variance: str = ""
     created_at: datetime = Field(default_factory=_now)
 
 
@@ -171,10 +175,13 @@ class TakeoffLine(BaseModel):
     building: str
     unit: str
     room: str
-    scope: str = "supply_install"  # supply_install | install_only | supply_only | misc
+    scope: str = "supply_install"  # supply_install | install_only | supply_only | misc | accessory
     floor_type: str
     product: str = ""
+    product_alt: str = ""
     spec_note: str = ""
+    qty: float = 0.0
+    unit_price: float = 0.0
     sqft: float
     waste_pct: float
     adhesive: str
@@ -192,6 +199,9 @@ class TakeoffLine(BaseModel):
 
 class LineUpdate(BaseModel):
     building: str | None = None
+    product_alt: str | None = None
+    qty: float | None = None
+    unit_price: float | None = None
     unit: str | None = None
     room: str | None = None
     scope: str | None = None
@@ -216,6 +226,8 @@ class LineCreate(BaseModel):
     floor_type: str = "Luxury Vinyl Plank"
     sqft: float = 0.0
     flat_cost: float = 0.0
+    qty: float = 0.0
+    unit_price: float = 0.0
 
 
 class SpecEntry(BaseModel):
@@ -223,9 +235,23 @@ class SpecEntry(BaseModel):
     surface: str = "floor"
     floor_type: str = ""
     product: str = ""
+    alternative: str = ""
+    price_per_sqft: float | None = None
+    use_alternative: bool = False
     adhesive: str | None = None
     unit_type: str | None = None
     note: str | None = None
+
+
+class SpecPriceItem(BaseModel):
+    index: int
+    price_per_sqft: float | None = None
+    use_alternative: bool = False
+
+
+class SpecPricingIn(BaseModel):
+    items: list[SpecPriceItem] = []
+    apply_to_lines: bool = True
 
 
 class SpecReadResult(BaseModel):

@@ -78,8 +78,26 @@ export default function Shell({ children, title, subtitle, action }: {
           </nav>
           <div className="flex items-center gap-3">
             <ThemeSwitcher compact />
-            <span className="hidden font-mono text-xs text-ink-3 sm:inline" data-testid="shell-user-email">
-              {user?.email ?? ""}
+            <span className="hidden items-center gap-2 sm:flex" data-testid="shell-user-identity">
+              {user?.picture ? (
+                <img
+                  src={user.picture}
+                  alt={user.name || user.email || "Account"}
+                  referrerPolicy="no-referrer"
+                  data-testid="shell-user-avatar"
+                  className="h-7 w-7 rounded-full border border-hairline object-cover"
+                />
+              ) : (
+                <span
+                  data-testid="shell-user-initials"
+                  className="grid h-7 w-7 place-items-center rounded-full border border-brand/40 bg-brand-soft font-mono text-[11px] font-semibold uppercase text-brand"
+                >
+                  {(user?.name || user?.email || "?").trim().charAt(0)}
+                </span>
+              )}
+              <span className="text-sm font-medium text-ink-2" data-testid="shell-user-email">
+                {user?.name || user?.email || ""}
+              </span>
             </span>
             <Button variant="ghost" size="sm" data-testid="logout-button" onClick={() => void endSession()}>
               <LogOut className="h-4 w-4" /> Sign out

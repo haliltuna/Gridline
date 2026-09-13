@@ -3,12 +3,13 @@ import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { UploadCloud, FileText, Loader2, ClipboardList, X, FileSearch } from "lucide-react";
-import { apiPost, ApiError } from "@/lib/api";
+import { apiPost, apiPut, ApiError } from "@/lib/api";
 import { uploadFile } from "@/lib/session";
-import type { CheckoutSession, Job, PageEstimate, SpecReadResult } from "@/lib/types";
+import type { CheckoutSession, Job, PageEstimate, SpecEntry, SpecPriceItem, SpecReadResult } from "@/lib/types";
 import Shell, { Panel } from "@/components/Shell";
 import UsageMeter from "@/components/UsageMeter";
 import ScanSequence from "@/components/ScanSequence";
+import MaterialPricing from "@/components/MaterialPricing";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -73,6 +74,10 @@ export default function UploadPage() {
   const [address, setAddress] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [spec, setSpec] = useState<File | null>(null);
+  // Spec-first flow: the finish schedule is read (and priced) BEFORE the drawings are measured.
+  const [pendingJob, setPendingJob] = useState<Job | null>(null);
+  const [specs, setSpecs] = useState<SpecEntry[]>([]);
+  const [pricingSaved, setPricingSaved] = useState(false);
   const navigate = useNavigate();
   const qc = useQueryClient();
 
@@ -112,25 +117,64 @@ export default function UploadPage() {
     onError: () => toast.error("Could not open the top-up checkout"),
   });
 
+  const ensureJob = async () => {
+    if (pendingJob) return pendingJob;
+    const job = await apiPost<Job>("/jobs", {
+      name: name || file?.name.replace(/\.pdf$/i, "") || spec?.name.replace(/\.pdf$/i, "") || "New takeoff",
+      client_name: client, client_email: clientEmail, address,
+    });
+    setPendingJob(job);
+    return job;
+  };
+
+  // Step 1 of the spec-first flow — read the schedule on its own, then prompt for pricing.
+  const readSpec = useMutation({
+    mutationFn: async () => {
+      if (!spec) throw new Error("Choose the spec sheet first");
+      const job = await ensureJob();
+      return uploadFile<SpecReadResult>(`/jobs/${job.id}/spec-sheet`, spec);
+    },
+    onSuccess: (r) => {
+      setSpecs(r.specs);
+      setPricingSaved(false);
+      toast.success(`Schedule read — ${r.specs.length} flooring product(s) found`);
+    },
+    onError: () => toast.error("Could not read that spec sheet"),
+  });
+
+  const savePricing = useMutation({
+    mutationFn: async (items: SpecPriceItem[]) => {
+      const job = await ensureJob();
+      return apiPut<SpecReadResult>(`/jobs/${job.id}/specs/pricing`, { items, apply_to_lines: true });
+    },
+    onSuccess: (r) => {
+      setSpecs(r.specs);
+      setPricingSaved(true);
+      toast.success(r.applied_to_lines > 0
+        ? `Pricing saved — applied to ${r.applied_to_lines} line(s)`
+        : "Pricing saved — it will land on every matching room when the blueprint is read");
+    },
+    onError: () => toast.error("Could not save that pricing"),
+  });
+
   const run = useMutation({
     mutationFn: async () => {
       if (!file) throw new Error("Choose a blueprint PDF first");
-      const job = await apiPost<Job>("/jobs", {
-        name: name || file.name.replace(/\.pdf$/i, ""),
-        client_name: client, client_email: clientEmail, address,
-      });
-      const read = await uploadFile<Job>(`/jobs/${job.id}/upload`, file);
-      if (spec) {
+      const job = await ensureJob();
+      // Spec sheet first, drawings second: the products ride into the measuring pass.
+      if (spec && specs.length === 0) {
         try {
           const res = await uploadFile<SpecReadResult>(`/jobs/${job.id}/spec-sheet`, spec);
-          toast.success(`Spec sheet read — ${res.specs.length} product(s) mapped to ${res.applied_to_lines} line(s)`);
+          setSpecs(res.specs);
+          toast.success(`Spec sheet read first — ${res.specs.length} product(s) in hand`);
         } catch {
-          toast.error("Blueprint read, but the spec sheet could not be read");
+          toast.error("Spec sheet could not be read — measuring without it");
         }
       }
-      return read;
+      return uploadFile<Job>(`/jobs/${job.id}/upload`, file);
     },
     onSuccess: (job) => {
+      setPendingJob(null);
       void qc.invalidateQueries({ queryKey: ["jobs"] });
       void qc.invalidateQueries({ queryKey: ["stats"] });
       toast.success("Takeoff ready — review and approve");
@@ -222,6 +266,28 @@ export default function UploadPage() {
                 title="Add the product schedule"
                 hint="We'll read which product goes in which room, including backsplashes"
               />
+              {spec && specs.length === 0 && (
+                <Button
+                  variant="outline" className="mt-3 w-full font-semibold"
+                  data-testid="spec-first-button" disabled={readSpec.isPending}
+                  onClick={() => readSpec.mutate()}
+                >
+                  {readSpec.isPending
+                    ? (<><Loader2 className="h-4 w-4 animate-spin" /> Reading the schedule…</>)
+                    : "Read the spec sheet first & price materials"}
+                </Button>
+              )}
+              {specs.length > 0 && (
+                <div className="mt-4">
+                  <MaterialPricing
+                    specs={specs}
+                    saved={pricingSaved}
+                    pending={savePricing.isPending}
+                    onSave={(items) => savePricing.mutate(items)}
+                    onSkip={() => setPricingSaved(true)}
+                  />
+                </div>
+              )}
             </div>
           </div>
 
