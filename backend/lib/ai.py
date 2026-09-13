@@ -82,6 +82,14 @@ Return STRICT JSON only, no prose, no markdown fence:
  ]
 }}
 
+STEP 2d — NAME THE PRODUCT, NOT THE CATEGORY.
+Every supply line must carry the BRANDED product from the drawings' own finish schedule /
+material legend: manufacturer + series + colour + item code, copied exactly
+(e.g. "Shaw Fifth Avenue Oak 5mm SPC 0847V-00734 Ravine"). Put it in "product". If the sheet
+names an approved alternative or "or equal", put that in "product_alt". Only leave "product"
+empty when the drawings genuinely print no product name — then add a flag saying so. Never
+invent a brand, and never put the generic category ("LVT", "ceramic tile") in "product".
+
 STEP 3 — SPECS IF PRESENT.
 Many sets include a finish schedule or keynote legend naming the actual products. If this set
 has one, fill "specs" with each product-to-room mapping, copying manufacturer/product/colour/code
@@ -350,7 +358,8 @@ def apply_specs_to_line(line: dict[str, Any], specs: list[dict[str, Any]]) -> di
     return patch
 
 
-def build_line(raw: dict[str, Any], job_id: str, labor_rate: float) -> dict[str, Any]:
+def build_line(raw: dict[str, Any], job_id: str, labor_rate: float,
+               waste_overrides: dict[str, float] | None = None) -> dict[str, Any]:
     scope = raw.get("scope") or "supply_install"
     if scope not in ("supply_install", "install_only", "supply_only", "misc", "accessory"):
         scope = "supply_install"
@@ -359,7 +368,10 @@ def build_line(raw: dict[str, Any], job_id: str, labor_rate: float) -> dict[str,
         ft = "Luxury Vinyl Plank"
     d = defaults_for(ft)
     sqft = float(raw.get("sqft") or 0) or round(float(raw.get("length_ft") or 0) * float(raw.get("width_ft") or 0), 1)
-    waste = float(raw["waste_pct"]) if raw.get("waste_pct") is not None else float(d["waste"])
+    # Waste: what the AI read on the sheet wins; otherwise the account's own default for that
+    # floor type; otherwise the industry figure in lib/flooring.
+    default_waste = float((waste_overrides or {}).get(ft, d["waste"]))
+    waste = float(raw["waste_pct"]) if raw.get("waste_pct") is not None else default_waste
     total_sqft = round(sqft * (1 + waste / 100), 1)
     qty = float(raw.get("qty") or 0)
     unit_price = float(raw.get("unit_price") or 0)

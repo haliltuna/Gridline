@@ -82,6 +82,9 @@ class Usage(BaseModel):
     capabilities: list[str]
     seat_count: int
     seats_used: int
+    plan_kind: str = ""
+    trial_days_left: int = 0
+    trial_ends_on: str = ""
 
 
 class TopUpPack(BaseModel):

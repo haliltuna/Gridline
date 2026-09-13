@@ -10,7 +10,7 @@ from lib.ai import apply_specs_to_line, build_line, line_cost, read_spec_sheet
 from lib.authz import account_id, require
 from lib.db import db
 from lib.flooring import FLOOR_TYPE_NAMES, MISC_PRESETS, SCOPES
-from lib.pdf import DEFAULT_TEMPLATE, TEMPLATES, quote_pdf, takeoff_pdf
+from lib.pdf import change_order_pdf, DEFAULT_TEMPLATE, TEMPLATES, quote_pdf, takeoff_pdf
 from models.schemas import (
     FieldChange,
     SpecPricingIn,
@@ -32,7 +32,10 @@ async def _company(user: dict) -> dict:
     s = await db.settings.find_one({"user_id": account_id(user)}, {"_id": 0}) or {}
     return {"name": s.get("company_name") or user.get("company") or "Gridline",
             "email": s.get("company_email") or user.get("email", ""),
-            "template": s.get("pdf_template") or DEFAULT_TEMPLATE}
+            "template": s.get("pdf_template") or DEFAULT_TEMPLATE,
+            "logo_data": s.get("logo_data", ""),
+            "business_number": s.get("business_number", ""),
+            "tax_number": s.get("tax_number", "")}
 
 
 # ---------- reference data for the advanced menu ----------
@@ -188,7 +191,7 @@ def _show(field: str, value: object) -> str:
 
 @router.get("/quotes/{quote_id}/diff", response_model=QuoteDiff)
 async def quote_diff(quote_id: str, against: str = Query(..., description="quote id to compare against"),
-                     user: dict = Depends(require("quote:read"))):
+                     user: dict = Depends(require("quote:read"))) -> QuoteDiff:
     new_q = await db.quotes.find_one({"id": quote_id, "user_id": account_id(user)}, {"_id": 0})
     old_q = await db.quotes.find_one({"id": against, "user_id": account_id(user)}, {"_id": 0})
     if not new_q or not old_q:
@@ -328,3 +331,15 @@ async def price_specs(job_id: str, body: SpecPricingIn, user: dict = Depends(req
                 applied += 1
 
     return SpecReadResult(specs=specs, brief=job.get("spec_brief", ""), applied_to_lines=applied)
+
+
+@router.get("/quotes/{quote_id}/change-order.pdf")
+async def download_change_order_pdf(quote_id: str, against: str = Query(...), template: str | None = None,
+                                    user: dict = Depends(require("export:read"))):
+    """The revision diff as a one-page PDF the client can sign off."""
+    diff = await quote_diff(quote_id, against, user)
+    q = await db.quotes.find_one({"id": quote_id, "user_id": account_id(user)}, {"_id": 0})
+    job = await db.jobs.find_one({"id": (q or {}).get("job_id")}, {"_id": 0}) or {}
+    company = await _company(user)
+    data = change_order_pdf(diff.model_dump(), job, company, _template(template, company["template"]))
+    return _pdf_response(data, f"Change order {diff.to_number}.pdf")

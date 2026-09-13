@@ -474,7 +474,11 @@ export default function Takeoff() {
                           className={cn("border-b border-hairline/60 align-middle", l.needs_review && "bg-amber-500/5")}>
                         <td className="px-4 py-3">
                           <div className="text-base font-medium text-ink" data-testid={`line-room-${l.id}`}>{l.room}</div>
-                          {l.product && <div className="mt-0.5 max-w-[220px] truncate font-mono text-[11px] text-brand" data-testid={`line-product-${l.id}`}>{l.product}</div>}
+                          {l.product
+                            ? <div className="mt-0.5 max-w-[240px] truncate font-mono text-[11px] font-semibold text-brand" title={l.product} data-testid={`line-product-${l.id}`}>{l.product}</div>
+                            : l.scope !== "misc" && l.scope !== "accessory"
+                              ? <div className="mt-0.5 font-mono text-[11px] text-amber-300" data-testid={`line-product-missing-${l.id}`}>no specified product — add the brand</div>
+                              : null}
                           {l.product_alt && canEdit && (
                             <button
                               type="button"
@@ -638,6 +642,16 @@ export default function Takeoff() {
                         </SelectContent>
                       </Select>
                     </div>
+                    {diff.data && diffAgainst && (
+                      <a
+                        href={pdfUrl(`/quotes/${latest!.id}/change-order.pdf?against=${diffAgainst}`)}
+                        target="_blank" rel="noreferrer"
+                        data-testid="change-order-pdf-link"
+                        className={cn(buttonVariants({ variant: "outline", size: "sm" }), "font-semibold")}
+                      >
+                        <FileDown className="h-3.5 w-3.5" /> Change order PDF for sign-off
+                      </a>
+                    )}
                     {diff.data && (
                       <>
                         <div className="grid grid-cols-3 gap-px border border-hairline bg-hairline/60">

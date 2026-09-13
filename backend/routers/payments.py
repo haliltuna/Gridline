@@ -66,6 +66,16 @@ async def _fulfil(record: dict) -> None:
             await db.jobs.update_one({"id": inv["job_id"]}, {"$set": {"status": "paid"}})
 
 
+async def _mark_state(query: dict, status: str) -> None:
+    """Move a pending transaction to a terminal, non-paid state so billing never sticks
+    on 'pending'. A paid record is never overwritten."""
+    await db.payment_transactions.update_one(
+        {**query, "payment_status": {"$ne": "paid"}},
+        {"$set": {"status": status, "payment_status": status,
+                  "updated_at": datetime.now(timezone.utc)}},
+    )
+
+
 async def _mark_paid(session_id: str, payment_intent: str | None, subscription: str | None) -> None:
     res = await db.payment_transactions.update_one(
         {"session_id": session_id, "payment_status": {"$ne": "paid"}},
@@ -199,7 +209,13 @@ async def payment_status(session_id: str):
             s = stripe.checkout.Session.retrieve(session_id)
             if s.payment_status == "paid" or s.status == "complete":
                 await _mark_paid(session_id, s.payment_intent, s.subscription)
-                record = await _record(session_id) or record
+            elif s.status == "expired":
+                # The customer walked away and the session timed out.
+                await _mark_state({"session_id": session_id}, "expired")
+            elif s.payment_status == "unpaid" and s.status == "open" and s.get("expires_at") \
+                    and s["expires_at"] < datetime.now(timezone.utc).timestamp():
+                await _mark_state({"session_id": session_id}, "expired")
+            record = await _record(session_id) or record
         except stripe.error.StripeError as exc:  # transient — report what the DB knows
             logger.warning("stripe status fetch failed: %s", exc)
     return PaymentStatus(session_id=session_id, status=record["status"],
@@ -222,15 +238,36 @@ async def stripe_webhook(request: Request):
     if kind in ("checkout.session.completed", "checkout.session.async_payment_succeeded"):
         await _mark_paid(obj["id"], obj.get("payment_intent"), obj.get("subscription"))
     elif kind == "checkout.session.async_payment_failed":
-        await db.payment_transactions.update_one({"session_id": obj["id"]},
-            {"$set": {"status": "failed", "payment_status": "failed",
-                      "updated_at": datetime.now(timezone.utc)}})
+        await _mark_state({"session_id": obj["id"]}, "failed")
     elif kind == "checkout.session.expired":
-        await db.payment_transactions.update_one({"session_id": obj["id"]},
-            {"$set": {"status": "expired", "payment_status": "expired",
-                      "updated_at": datetime.now(timezone.utc)}})
+        await _mark_state({"session_id": obj["id"]}, "expired")
+    elif kind == "payment_intent.payment_failed":
+        # Card declined on the payment page itself — no session event fires for this.
+        await _mark_state({"stripe_payment_intent_id": obj.get("id")}, "failed")
+        await _mark_state({"session_id": (obj.get("metadata") or {}).get("session_id", "")}, "failed")
+    elif kind == "payment_intent.canceled":
+        await _mark_state({"stripe_payment_intent_id": obj.get("id")}, "cancelled")
+    elif kind == "invoice.payment_failed":
+        # A renewal failed: flag the account so Billing shows it instead of silently lapsing.
+        sub = obj.get("subscription")
+        rec = await db.payment_transactions.find_one({"stripe_subscription_id": sub}, {"_id": 0}) if sub else None
+        if rec:
+            await db.users.update_one({"id": rec["account_id"]},
+                {"$set": {"plan_payment_state": "past_due",
+                          "plan_payment_note": "Your last subscription payment failed — update the card on the Billing page."}})
+    elif kind in ("invoice.paid", "invoice.payment_succeeded"):
+        sub = obj.get("subscription")
+        rec = await db.payment_transactions.find_one({"stripe_subscription_id": sub}, {"_id": 0}) if sub else None
+        if rec:
+            await db.users.update_one({"id": rec["account_id"]},
+                {"$set": {"plan_payment_state": "active", "plan_payment_note": ""}})
+    elif kind == "customer.subscription.deleted":
+        rec = await db.payment_transactions.find_one({"stripe_subscription_id": obj.get("id")}, {"_id": 0})
+        if rec:
+            # Cancelled or lapsed: fall back to the trial tier rather than leaving paid caps open.
+            await db.users.update_one({"id": rec["account_id"]},
+                {"$set": {"plan": "trial", "plan_payment_state": "cancelled",
+                          "plan_payment_note": "Your subscription ended — pick a plan to keep quoting."}})
     elif kind == "charge.refunded":
-        await db.payment_transactions.update_one({"stripe_payment_intent_id": obj.get("payment_intent")},
-            {"$set": {"status": "refunded", "payment_status": "refunded",
-                      "updated_at": datetime.now(timezone.utc)}})
+        await _mark_state({"stripe_payment_intent_id": obj.get("payment_intent")}, "refunded")
     return {"status": "ok"}

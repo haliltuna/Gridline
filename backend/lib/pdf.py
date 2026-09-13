@@ -1,5 +1,7 @@
 """Takeoff / quote / invoice PDF export in three selectable templates (reportlab)."""
 
+import base64
+import binascii
 import io
 from datetime import datetime, timezone
 from typing import Any
@@ -10,7 +12,7 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.platypus import (
-    BaseDocTemplate, Frame, KeepTogether, PageTemplate, Paragraph, Spacer, Table, TableStyle,
+    BaseDocTemplate, Frame, Image, KeepTogether, PageTemplate, Paragraph, Spacer, Table, TableStyle,
 )
 
 from lib.flooring import scope_label
@@ -115,11 +117,37 @@ def _money(v: float) -> str:
     return f"${v:,.2f}"
 
 
+def _logo(company: dict):
+    """The account's uploaded logo (data URI) as a ~0.9in tall flowable, or None."""
+    raw = company.get("logo_data") or ""
+    if "base64," not in raw:
+        return None
+    try:
+        data = base64.b64decode(raw.split("base64,", 1)[1])
+        img = Image(io.BytesIO(data))
+    except (binascii.Error, OSError, ValueError):
+        return None
+    scale = min(1.6 * inch / max(img.imageWidth, 1), 0.62 * inch / max(img.imageHeight, 1))
+    img.drawWidth = img.imageWidth * scale
+    img.drawHeight = img.imageHeight * scale
+    return img
+
+
 def _header(story: list, t: dict, s: dict, doc_kind: str, heading: str, meta: list[tuple[str, str]], company: dict):
     title = heading.upper() if t["upper_titles"] else heading
-    left = [
+    left: list = []
+    logo = _logo(company)
+    if logo is not None:
+        left += [logo, Spacer(1, 6)]
+    left += [
         Paragraph(f"<b>{company.get('name') or 'Gridline'}</b>", s["h2"]),
         Paragraph(company.get("email") or "", s["small"]),
+    ]
+    if company.get("business_number"):
+        left.append(Paragraph(f"Business no. {company['business_number']}", s["small"]))
+    if company.get("tax_number"):
+        left.append(Paragraph(f"Tax no. {company['tax_number']}", s["small"]))
+    left += [
         Spacer(1, 6),
         Paragraph(title, s["title"]),
     ]
@@ -151,11 +179,21 @@ def _line_table(lines: list[dict], t: dict, s: dict, show_product: bool) -> Tabl
     widths = [1.5 * inch, 0.85 * inch, 2.15 * inch, 0.6 * inch, 0.55 * inch, 0.7 * inch, 0.95 * inch]
     rows: list[list] = [[Paragraph(f"<b>{h}</b>", s["cellb"]) for h in head]]
     for line in lines:
-        desc = line.get("floor_type") or line.get("room") or "—"
-        if show_product and line.get("product"):
-            desc = f"{desc}<br/><font size=7>{line['product']}</font>"
-        elif line.get("adhesive"):
-            desc = f"{desc}<br/><font size=7>{line['adhesive']}</font>"
+        # The branded product leads; the generic floor type and adhesive are the sub-line.
+        category = line.get("floor_type") or line.get("room") or "—"
+        product = (line.get("product") or "").strip() if show_product else ""
+        if product:
+            desc = f"<b>{product}</b>"
+            sub = category
+            if line.get("product_alt"):
+                sub = f"{sub} · or approved equal: {line['product_alt']}"
+            elif line.get("adhesive"):
+                sub = f"{sub} · {line['adhesive']}"
+            desc = f"{desc}<br/><font size=7>{sub}</font>"
+        else:
+            desc = category
+            if line.get("adhesive"):
+                desc = f"{desc}<br/><font size=7>{line['adhesive']}</font>"
         misc = line.get("scope") == "misc"
         acc = line.get("scope") == "accessory"
         scope_text = "Misc." if misc else scope_label(line.get("scope", "supply_install")).replace(" (labor)", "").replace(" (material)", "")
@@ -325,5 +363,87 @@ def quote_pdf(kind: str, record: dict, job: dict, company: dict, template: str) 
             "Quotation valid for 30 days. Quantities include the waste factor shown per line. "
             "Accepting this quote authorises the scope of work listed above.")
     story.append(KeepTogether(Paragraph(tail, s["small"])))
+    doc.build(story)
+    return buf.getvalue()
+
+
+def change_order_pdf(diff: dict, job: dict, company: dict, template: str) -> bytes:
+    """One-page revision comparison the client can sign: what changed, by how much, and the
+    new total — history intact, nothing rewritten."""
+    t, buf = _theme(template), io.BytesIO()
+    s = _styles(t)
+    doc = _doc(buf, t, f"Change order · {diff.get('to_number', '')} · {company.get('name') or 'Gridline'}")
+    story: list = []
+    _header(story, t, s, "CHANGE ORDER", job.get("name", ""), [
+        ("From", f"{diff.get('from_number', '')} (rev {diff.get('from_revision', '')})"),
+        ("To", f"{diff.get('to_number', '')} (rev {diff.get('to_revision', '')})"),
+        ("Date", datetime.now(timezone.utc).strftime("%d %b %Y")),
+    ], company)
+
+    story.append(Paragraph(
+        f"Client: {job.get('client_name') or '—'} · Site: {job.get('address') or '—'}", s["small"]))
+    story.append(Spacer(1, 10))
+
+    delta = float(diff.get("delta", 0))
+    strip = Table([[
+        Paragraph(f"<b>{_money(float(diff.get('from_total', 0)))}</b><br/><font size=7>PREVIOUS TOTAL</font>", s["cell"]),
+        Paragraph(f"<b>{_money(float(diff.get('to_total', 0)))}</b><br/><font size=7>REVISED TOTAL</font>", s["cell"]),
+        Paragraph(f"<b>{'+' if delta >= 0 else '-'}{_money(abs(delta))}</b><br/><font size=7>CHANGE</font>", s["cell"]),
+    ]], colWidths=[2.43 * inch] * 3)
+    strip.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), t["band"]),
+        ("BOX", (0, 0), (-1, -1), 0.4, t["rule"]),
+        ("INNERGRID", (0, 0), (-1, -1), 0.4, t["rule"]),
+        ("TOPPADDING", (0, 0), (-1, -1), 7), ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+    ]))
+    story.append(strip)
+
+    moved = [row for row in diff.get("lines", []) if row.get("change") != "unchanged"]
+    story.append(Paragraph("WHAT CHANGED" if t["upper_titles"] else "What changed", s["h2"]))
+    if not moved:
+        story.append(Paragraph("No line changed between these revisions.", s["body"]))
+    else:
+        head = ["Line", "Change", "Detail", "Was", "Now", "Difference"]
+        widths = [1.55 * inch, 0.7 * inch, 2.2 * inch, 0.85 * inch, 0.85 * inch, 0.95 * inch]
+        rows: list[list] = [[Paragraph(f"<b>{h}</b>", s["cellb"]) for h in head]]
+        for row in moved:
+            detail = "; ".join(f"{c['field']}: {c['before']} → {c['after']}"
+                               for c in row.get("changes", [])) or "—"
+            d = float(row.get("delta", 0))
+            rows.append([
+                Paragraph(f"{row.get('room', '')}<br/><font size=7>{row.get('building', '')} / {row.get('unit', '')}</font>", s["cell"]),
+                Paragraph(str(row.get("change", "")).title(), s["cell"]),
+                Paragraph(detail, s["cell"]),
+                Paragraph(_money(float(row.get("old_cost", 0))), s["num"]),
+                Paragraph(_money(float(row.get("new_cost", 0))), s["num"]),
+                Paragraph(f"{'+' if d >= 0 else '-'}{_money(abs(d))}", s["num"]),
+            ])
+        table = Table(rows, colWidths=widths, repeatRows=1)
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), t["band"]),
+            ("TEXTCOLOR", (0, 0), (-1, -1), t["ink"]),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LINEBELOW", (0, 0), (-1, 0), 0.8, t["accent"]),
+            ("LINEBELOW", (0, 1), (-1, -1), 0.3, t["rule"]),
+            ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ("LEFTPADDING", (0, 0), (-1, -1), 5), ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ]))
+        story.append(table)
+
+    story.append(Spacer(1, 18))
+    sign = Table([
+        [Paragraph("Client signature", s["small"]), Paragraph("Date", s["small"])],
+        [Spacer(1, 26), Spacer(1, 26)],
+    ], colWidths=[4.4 * inch, 2.9 * inch])
+    sign.setStyle(TableStyle([
+        ("LINEBELOW", (0, 1), (-1, 1), 0.6, t["rule"]),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    story.append(KeepTogether(sign))
+    story.append(Spacer(1, 8))
+    story.append(Paragraph(
+        "Signing authorises the revised scope and total above. Earlier revisions remain on record.",
+        s["small"]))
     doc.build(story)
     return buf.getvalue()

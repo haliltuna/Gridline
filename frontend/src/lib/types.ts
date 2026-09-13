@@ -34,6 +34,10 @@ export interface Settings {
   acc_transition_price: number;
   acc_nosing_price: number;
   acc_cove_base_price: number;
+  logo_data?: string;
+  business_number: string;
+  tax_number: string;
+  waste_overrides: Record<string, number>;
 }
 
 export interface TaxDetect {
@@ -456,6 +460,9 @@ export interface Usage {
   capabilities: string[];
   seat_count: number;
   seats_used: number;
+  plan_kind: string;
+  trial_days_left: number;
+  trial_ends_on: string;
 }
 
 export interface CheckoutSession {

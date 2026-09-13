@@ -6,6 +6,7 @@ import type { DashboardStats, Job } from "@/lib/types";
 import { money, num } from "@/lib/types";
 import Shell, { Panel, Stat, StatusBadge } from "@/components/Shell";
 import MarginAlerts from "@/components/MarginAlerts";
+import TrialCountdown from "@/components/TrialCountdown";
 import UsageMeter from "@/components/UsageMeter";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -27,6 +28,7 @@ export default function Dashboard() {
       }
     >
       <div className="mb-6 space-y-4">
+        <TrialCountdown />
         <MarginAlerts />
         <UsageMeter compact />
       </div>

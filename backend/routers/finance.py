@@ -1,9 +1,10 @@
+import base64
 import os
 import uuid
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 
 from lib import mailer
 from lib.ai import line_cost
@@ -45,6 +46,15 @@ async def _needs(user: dict, cap: str) -> None:
         raise HTTPException(status_code=402, detail=upgrade_message(plan_id, cap))
 
 
+def _email_footer(company: dict, lead: str) -> str:
+    bits = [f"{lead} or contact {company['email']}."]
+    if company.get("business_number"):
+        bits.append(f"Business no. {company['business_number']}.")
+    if company.get("tax_number"):
+        bits.append(f"Tax no. {company['tax_number']}.")
+    return " ".join(bits)
+
+
 async def _company(user: dict) -> dict:
     s = await db.settings.find_one({"user_id": account_id(user)}, {"_id": 0}) or {}
     return {
@@ -52,6 +62,9 @@ async def _company(user: dict) -> dict:
         "email": s.get("company_email") or user.get("email", ""),
         "currency": s.get("currency", "USD"),
         "template": s.get("pdf_template", "contractor_clean"),
+        "logo_data": s.get("logo_data", ""),
+        "business_number": s.get("business_number", ""),
+        "tax_number": s.get("tax_number", ""),
     }
 
 # ---------- settings ----------
@@ -66,9 +79,36 @@ async def get_settings(user: dict = Depends(require("settings:read"))):
 
 @router.put("/settings", response_model=Settings)
 async def put_settings(body: SettingsIn, user: dict = Depends(require("settings:write"))):
-    doc = Settings(user_id=account_id(user), **body.model_dump())
+    existing = await db.settings.find_one({"user_id": account_id(user)}, {"_id": 0}) or {}
+    # The logo is uploaded through its own endpoint, so it must survive a settings save.
+    doc = Settings(user_id=account_id(user), logo_data=existing.get("logo_data", ""),
+                   **body.model_dump())
     await db.settings.update_one({"user_id": account_id(user)}, {"$set": doc.model_dump()}, upsert=True)
     return doc
+
+
+@router.post("/settings/logo", response_model=Settings)
+async def upload_logo(file: UploadFile = File(...), user: dict = Depends(require("settings:write"))):
+    """Store the company logo inline (data URI) so every PDF and email carries it without
+    depending on an external host."""
+    raw = await file.read()
+    if len(raw) > 1_500_000:
+        raise HTTPException(status_code=400, detail="Logo must be under 1.5 MB")
+    kind = (file.content_type or "").lower()
+    if kind not in ("image/png", "image/jpeg", "image/jpg"):
+        raise HTTPException(status_code=400, detail="Logo must be a PNG or JPEG")
+    data_uri = f"data:{kind};base64,{base64.b64encode(raw).decode()}"
+    await db.settings.update_one({"user_id": account_id(user)},
+                                 {"$set": {"logo_data": data_uri}}, upsert=True)
+    doc = await db.settings.find_one({"user_id": account_id(user)}, {"_id": 0}) or {}
+    return Settings(**doc)
+
+
+@router.delete("/settings/logo", response_model=Settings)
+async def delete_logo(user: dict = Depends(require("settings:write"))):
+    await db.settings.update_one({"user_id": account_id(user)}, {"$set": {"logo_data": ""}}, upsert=True)
+    doc = await db.settings.find_one({"user_id": account_id(user)}, {"_id": 0}) or {}
+    return Settings(**doc)
 
 
 @router.get("/tax/regions")
@@ -162,7 +202,7 @@ async def send_quote(quote_id: str, user: dict = Depends(require("quote:write"))
               (q["tax_label"], f"${q['tax_amount']:,.2f}"),
               ("Quote total", f"${q['total']:,.2f}")],
         cta=None,
-        footer=f"Questions? Reply to this email or contact {company['email']}.",
+        footer=_email_footer(company, "Questions? Reply to this email"),
     )
     sent = await mailer.send(to, f"Quote {q['number']} — {job.get('name', '')}", html,
                              attachment=(f"{q['number']}.pdf", pdf))
@@ -300,7 +340,7 @@ async def send_invoice(invoice_id: str, user: dict = Depends(require("invoice:wr
               (inv["tax_label"], f"${inv['tax_amount']:,.2f}"),
               ("Amount due", f"${inv['total']:,.2f}")],
         cta=("Pay now by card", pay_url),
-        footer=f"Payments are processed by Stripe. Questions? Contact {company['email']}.",
+        footer=_email_footer(company, "Payments are processed by Stripe"),
     )
     sent = await mailer.send(to, f"Invoice {inv['number']} — {inv.get('job_name', '')}", html,
                              attachment=(f"{inv['number']}.pdf", pdf))
@@ -596,7 +636,22 @@ async def billing_usage(user: dict = Depends(require("settings:read"))):
         jobs_used=len(jobs), max_file_mb=plan["max_file_mb"], overage_pages=0,
         overage_cost=0.0,
         capabilities=plan["capabilities"], seat_count=plan["seat_count"], seats_used=seats,
+        plan_kind=plan["kind"], **_trial_window(doc, plan),
     )
+
+
+def _trial_window(account: dict, plan: dict) -> dict:
+    """Days left on the 14-day trial, counted from when the account (or trial) started."""
+    if plan["kind"] != "trial":
+        return {"trial_days_left": 0, "trial_ends_on": ""}
+    started = account.get("plan_started_at") or account.get("created_at") or datetime.now(timezone.utc)
+    if isinstance(started, str):
+        started = datetime.fromisoformat(started.replace("Z", "+00:00"))
+    if started.tzinfo is None:
+        started = started.replace(tzinfo=timezone.utc)
+    ends = started + timedelta(days=14)
+    left = (ends - datetime.now(timezone.utc)).days
+    return {"trial_days_left": max(0, left + 1), "trial_ends_on": ends.strftime("%d %b %Y")}
 
 
 @router.get("/billing/top-ups", response_model=list[TopUpPack])

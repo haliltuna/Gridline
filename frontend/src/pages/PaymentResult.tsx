@@ -21,18 +21,26 @@ export default function PaymentResult({ cancelled = false }: { cancelled?: boole
     queryKey: ["payment-status", sessionId],
     queryFn: () => apiGet<PaymentStatus>(`/payments/status/${sessionId}`),
     enabled: !cancelled && Boolean(sessionId),
-    refetchInterval: (q) => (q.state.data?.payment_status === "paid" ? false : 2000),
+    refetchInterval: (q) => {
+      const st = q.state.data?.payment_status;
+      return st && ["paid", "failed", "expired", "cancelled", "refunded"].includes(st) ? false : 2000;
+    },
     retry: false,
   });
 
   useEffect(() => {
-    if (!status.data || status.data.payment_status === "paid") return;
+    if (!status.data || ["paid", "failed", "expired", "cancelled"].includes(status.data.payment_status)) return;
     const id = setTimeout(() => setTries((t) => t + 1), 2000);
     return () => clearTimeout(id);
   }, [status.data, tries]);
 
-  const paid = status.data?.payment_status === "paid";
-  const pending = !cancelled && !paid && tries < 10;
+  const state = status.data?.payment_status ?? "";
+  const paid = state === "paid";
+  // Stripe told us the attempt is over: a declined card or an abandoned session must never
+  // leave the page spinning "confirming…" forever.
+  const failed = state === "failed" || state === "cancelled";
+  const expired = state === "expired";
+  const pending = !cancelled && !paid && !failed && !expired && tries < 10;
 
   return (
     <div className="relative grid min-h-screen place-items-center overflow-hidden bg-canvas px-5 py-12">
@@ -55,7 +63,21 @@ export default function PaymentResult({ cancelled = false }: { cancelled?: boole
             </p>
           </div>
         )}
-        {!cancelled && !paid && (
+        {!cancelled && (failed || expired) && (
+          <div className="mt-6" data-testid={failed ? "payment-failed" : "payment-expired"}>
+            <XCircle className="h-10 w-10 text-red-400" />
+            <h1 className="mt-4 font-heading text-3xl font-bold text-ink">
+              {failed ? "Payment did not go through" : "Checkout link expired"}
+            </h1>
+            <p className="mt-2 text-[15px] text-ink-3">
+              {failed
+                ? "Your card was declined or the payment was cancelled, so nothing was charged and your plan is unchanged. Try again with another card."
+                : "This checkout session timed out before it was paid. Nothing was charged — start a fresh checkout from Billing."}
+            </p>
+            {sessionId && <p className="mt-3 break-all font-mono text-xs text-ink-4">{sessionId}</p>}
+          </div>
+        )}
+        {!cancelled && !paid && !failed && !expired && (
           <div className="mt-6" data-testid="payment-pending">
             {pending ? <Loader2 className="h-10 w-10 animate-spin text-brand" /> : <XCircle className="h-10 w-10 text-amber-400" />}
             <h1 className="mt-4 font-heading text-3xl font-bold text-ink">

@@ -17,6 +17,25 @@ VIEWER_EMAIL = "viewer@gridline.app"
 VIEWER_ID = "33333333-3333-4333-8333-333333333333"
 
 
+# The branded products the demo sets are "specified" with, plus the approved alternative —
+# a supply line must read as a product name, never a bare category.
+SPEC_PRODUCTS: dict[str, tuple[str, str]] = {
+    "Luxury Vinyl Plank": ("Shaw Fifth Avenue Oak 5mm SPC 0847V-00734 Ravine", "Mohawk Batavia II 6mm SPC — Sandbar"),
+    "Luxury Vinyl Tile": ("Armstrong Natural Creations Mystix LVT ST880 Grey Ash", "Patcraft Modern Mix LVT — Ashen"),
+    "Carpet Tile": ("Interface Open Air 403 24x24 Charcoal 104655", "Shaw Contract Hexagon 24x24 — Graphite"),
+    "Broadloom Carpet": ("Mohawk Group Bordering Broadloom BT254 Fog", "Shaw Contract Basis Broadloom — Mist"),
+    "Porcelain Tile": ("Daltile Emerson Wood EP01 12x48 Ashen", "MSI Praia Grey 12x48 porcelain"),
+    "Ceramic Tile": ("Daltile Rittenhouse Square 3x6 Arctic White RS01", "Emser Cotto 3x6 — Blanco"),
+    "Sheet Vinyl": ("Armstrong Medintech Homogeneous Sheet 85140 Pearl", "Forbo Eternal Sheet — Pearl"),
+    "Engineered Hardwood": ("Mirage Admiration Red Oak 5in Natural", "Mercier Nature Red Oak 5in — Natural"),
+    "Rubber Flooring": ("Nora Norament 926 Grano 5104", "Mannington BioSpec Rubber — Slate"),
+    "VCT": ("Armstrong Standard Excelon Imperial Texture 51858 Sandrift White", "Congoleum VCT — Sand"),
+    "Epoxy / Resinous": ("Sika Sikafloor 264 broadcast system, Light Grey", "Dur-A-Flex Poly-Crete MD — Grey"),
+    "Polished Concrete": ("Prosoco Consolideck LS Guard polished system, 800 grit", "Ameripolish SureLock dye + guard"),
+    "Natural Stone": ("MSI Crema Marfil 12x24 honed marble", "Emser Marfil select — honed"),
+}
+
+
 async def main() -> None:
     await db.users.delete_many({"email": EMAIL})
     await db.sessions.delete_many({"user_id": USER_ID})
@@ -98,7 +117,10 @@ async def main() -> None:
         })
         docs = []
         for (b, u, r, ft, sqft) in line_specs[jid]:
-            line = build_line({"building": b, "unit": u, "room": r, "floor_type": ft, "sqft": sqft}, jid, 58.0)
+            prod, alt = SPEC_PRODUCTS.get(ft, ("", ""))
+            line = build_line({"building": b, "unit": u, "room": r, "floor_type": ft, "sqft": sqft,
+                               "product": prod, "product_alt": alt,
+                               "spec_note": f"Specified for '{r}' on the finish schedule"}, jid, 58.0)
             line["approved"] = status != "takeoff"
             docs.append(line)
         await db.takeoff_lines.insert_many(docs)
@@ -148,13 +170,13 @@ async def main() -> None:
         "source_job_id": "seed-job-oakridge", "created_at": now - timedelta(days=6),
         "lines": [
             {"room": "Living / Dining", "scope": "supply_install", "floor_type": "Luxury Vinyl Plank",
-             "product": "", "sqft": 310.0, "waste_pct": 10.0, "flat_cost": 0.0},
+             "product": "Shaw Fifth Avenue Oak 5mm SPC 0847V-00734 Ravine", "product_alt": "Mohawk Batavia II 6mm SPC — Sandbar", "sqft": 310.0, "waste_pct": 10.0, "flat_cost": 0.0},
             {"room": "Bedroom 1", "scope": "supply_install", "floor_type": "Carpet Tile",
-             "product": "", "sqft": 140.0, "waste_pct": 5.0, "flat_cost": 0.0},
+             "product": "Interface Open Air 403 24x24 Charcoal 104655", "product_alt": "Shaw Contract Hexagon 24x24 — Graphite", "sqft": 140.0, "waste_pct": 5.0, "flat_cost": 0.0},
             {"room": "Bathroom 1", "scope": "supply_install", "floor_type": "Porcelain Tile",
-             "product": "", "sqft": 50.0, "waste_pct": 10.0, "flat_cost": 0.0},
+             "product": "Daltile Emerson Wood EP01 12x48 Ashen", "product_alt": "MSI Praia Grey 12x48 porcelain", "sqft": 50.0, "waste_pct": 10.0, "flat_cost": 0.0},
             {"room": "Kitchen Backsplash", "scope": "supply_install", "floor_type": "Ceramic Tile",
-             "product": "", "sqft": 22.0, "waste_pct": 10.0, "flat_cost": 0.0},
+             "product": "Daltile Rittenhouse Square 3x6 Arctic White RS01", "product_alt": "Emser Cotto 3x6 — Blanco", "sqft": 22.0, "waste_pct": 10.0, "flat_cost": 0.0},
             {"room": "Floor prep / grinding", "scope": "misc", "floor_type": "",
              "product": "", "sqft": 0.0, "waste_pct": 0.0, "flat_cost": 225.0},
         ],

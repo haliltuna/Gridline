@@ -186,3 +186,27 @@ Test guidance: /app/auth_testing.md (seed a sessions row; OAuth itself is not sc
   (`FieldChange{field,before,after}`) across scope, floor type, product, sq ft, waste, labor hr,
   $/sq ft, labor rate, flat price, qty and $ each. Rows sort biggest-mover-first; the Takeoff
   diff dialog renders before→after chips, a per-line ± delta and a `diff-biggest-mover` badge.
+
+## Branding, waste defaults, trial countdown, change-order PDF, webhook edges (2026-09)
+- **Branded products everywhere**: the AI prompt now REQUIRES the manufacturer+series+colour+code
+  in `product` (never the category) and the "or equal" in `product_alt`; seed data carries real
+  products per floor type (`seed.SPEC_PRODUCTS`) and existing rows were backfilled. PDFs print the
+  product in bold with "{floor type} · or approved equal: {alt}" underneath; the takeoff flags a
+  supply line with no product.
+- **Branding**: settings hold `logo_data` (data URI via POST/DELETE `/api/settings/logo`, PNG/JPEG
+  ≤1.5 MB), `business_number`, `tax_number`. All three render in every PDF header (`lib/pdf._logo`)
+  and the numbers appear in the quote/invoice email footer. PUT /settings preserves the logo.
+- **Waste defaults**: `settings.waste_overrides{floor_type: pct}` feed `build_line(..., waste_overrides)`
+  — a waste % read off the drawings still wins. UI: "Waste factor defaults" panel.
+- **Trial countdown**: `/api/billing/usage` returns `plan_kind`, `trial_days_left`, `trial_ends_on`
+  (14 days from `plan_started_at`/`created_at`); `components/TrialCountdown.tsx` on the dashboard
+  shows the banner with a one-tap upgrade, turning red at ≤3 days.
+- **Change-order PDF**: `GET /api/quotes/{id}/change-order.pdf?against={id}` (`lib/pdf.change_order_pdf`)
+  — previous/revised/change strip, the field-level what-changed table and a signature block.
+  Linked from the diff dialog (`change-order-pdf-link`).
+- **Webhook edges**: `_mark_state()` never overwrites a paid record and handles
+  `payment_intent.payment_failed|canceled`, `checkout.session.expired|async_payment_failed`,
+  `charge.refunded`; `invoice.payment_failed`/`paid` set `plan_payment_state` (past_due/active);
+  `customer.subscription.deleted` drops the account to `trial` with a note. `/payments/status`
+  also marks a session expired when Stripe says so, so the result page never spins forever —
+  it shows a distinct failed / expired card instead.

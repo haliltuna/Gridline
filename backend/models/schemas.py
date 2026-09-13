@@ -114,6 +114,12 @@ class Settings(BaseModel):
     acc_transition_price: float = 18.0
     acc_nosing_price: float = 42.0
     acc_cove_base_price: float = 3.4
+    # Branding shown on every quote / invoice PDF and email
+    logo_data: str = ""          # data URI, set by POST /api/settings/logo
+    business_number: str = ""    # company / licence / registration number
+    tax_number: str = ""         # GST/HST/VAT/EIN as printed on documents
+    # Your own waste % per floor type; anything missing uses the industry default
+    waste_overrides: dict[str, float] = {}
 
 
 class SettingsIn(BaseModel):
@@ -130,6 +136,9 @@ class SettingsIn(BaseModel):
     acc_transition_price: float = 18.0
     acc_nosing_price: float = 42.0
     acc_cove_base_price: float = 3.4
+    business_number: str = ""
+    tax_number: str = ""
+    waste_overrides: dict[str, float] = {}
 
 
 class TaxDetect(BaseModel):

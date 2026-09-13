@@ -167,7 +167,8 @@ async def upload_blueprint(job_id: str, file: UploadFile = File(...), user: dict
     labor_rate = float(settings.get("labor_rate", 58.0))
 
     await db.takeoff_lines.delete_many({"job_id": job_id})
-    lines = [build_line(r, job_id, labor_rate) for r in result["lines"]]
+    waste_overrides = {k: float(v) for k, v in (settings.get("waste_overrides") or {}).items()}
+    lines = [build_line(r, job_id, labor_rate, waste_overrides) for r in result["lines"]]
     if job_specs:
         for line in lines:
             line.update(apply_specs_to_line(line, job_specs))
@@ -231,7 +232,8 @@ async def add_line(job_id: str, body: LineCreate, user: dict = Depends(require("
                else "acc_cove_base_price" if "base" in room
                else "acc_transition_price")
         payload["unit_price"] = float(settings.get(key) or 0)
-    line = build_line(payload, job_id, float(settings.get("labor_rate", 58.0)))
+    line = build_line(payload, job_id, float(settings.get("labor_rate", 58.0)),
+                      {k: float(v) for k, v in (settings.get("waste_overrides") or {}).items()})
     await db.takeoff_lines.insert_one(dict(line))
     return _with_cost(line)
 
