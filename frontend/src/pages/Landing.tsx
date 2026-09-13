@@ -482,12 +482,32 @@ export default function Landing() {
                   "flex h-full flex-col border bg-surface p-7",
                   p.highlight ? "border-brand/60 shadow-[0_0_40px_-12px_rgba(226,249,82,0.35)]" : "border-hairline/80",
                 )}>
-                  {p.badge && (
-                    <span className={cn(
-                      "mb-4 self-start rounded-full border px-3 py-1 font-mono text-[11px] uppercase tracking-widest",
-                      p.highlight ? "border-brand/30 bg-brand-soft text-brand" : "border-hairline bg-surface-2 text-ink-3",
-                    )}>{p.badge}</span>
-                  )}
+                  <div className="mb-4 flex min-h-7 items-start justify-between gap-3">
+                    {p.badge ? (
+                      <span className={cn(
+                        "rounded-full border px-3 py-1 font-mono text-[11px] uppercase tracking-widest",
+                        p.highlight ? "border-brand/30 bg-brand-soft text-brand" : "border-hairline bg-surface-2 text-ink-3",
+                      )}>{p.badge}</span>
+                    ) : <span />}
+                    {sub && (
+                      <div className="inline-flex shrink-0 items-center border border-hairline bg-surface-2"
+                           data-testid={`plan-${p.id}-cadence-toggle`}>
+                        {([["annual", "Yr"], ["monthly", "Mo"]] as const).map(([k, label]) => (
+                          <button
+                            key={k} type="button"
+                            data-testid={`plan-${p.id}-cadence-${k}`}
+                            onClick={() => setAnnual(k === "annual")}
+                            className={cn(
+                              "px-2.5 py-1 font-mono text-[10px] uppercase tracking-widest transition-colors duration-150",
+                              (k === "annual") === annual ? "bg-brand text-on-brand" : "text-ink-3 hover:text-ink-2",
+                            )}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <h3 className="font-heading text-xl font-semibold text-ink">{p.name}</h3>
                   <div className="mt-4 flex items-baseline gap-2">
                     {p.kind === "contact" ? (
@@ -548,22 +568,13 @@ export default function Landing() {
           })}
         </div>
 
-        {/* commitment terms */}
-        <div className="mt-10 border border-hairline/80 bg-surface p-7" data-testid="landing-billing-terms">
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-brand">Commitment & cancellation</p>
-          <ul className="mt-4 grid gap-3 md:grid-cols-2">
-            {[
-              "Monthly plans cancel anytime, no fee.",
-              "Annual plans are a 12-month commitment, billed monthly at the lower rate.",
-              "Cancel an annual plan early and you get exactly one closing invoice: $30/mo (Job Pack 5) or $70/mo (Unlimited Pro) for the months already billed.",
-              "Billing then stops completely — nothing is charged for the remaining months.",
-            ].map((t) => (
-              <li key={t} className="flex gap-2.5 text-[15px] text-ink-2">
-                <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand" />{t}
-              </li>
-            ))}
-          </ul>
-        </div>
+        {/* commitment terms — fine print, asterisked */}
+        <p className="mt-8 max-w-4xl font-mono text-[11px] leading-relaxed text-ink-4" data-testid="landing-billing-terms">
+          * Monthly plans cancel anytime, no fee. Annual plans are a 12-month commitment billed monthly at
+          the lower rate; cancel early and you get exactly one closing invoice — $30/mo (Job Pack 5) or
+          $70/mo (Unlimited Pro) for the months already billed — then billing stops completely, with
+          nothing charged for the remaining months.
+        </p>
 
         {/* the pricing math, published */}
         <div className="mt-14 grid gap-px border border-hairline/80 bg-hairline/60 lg:grid-cols-[0.95fr_1.05fr]" data-testid="pricing-math">
