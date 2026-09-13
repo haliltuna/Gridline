@@ -70,6 +70,9 @@ class Usage(BaseModel):
     period: str
     pages_included: int
     pages_used: int
+    pages_remaining: int
+    limit_reached: bool
+    near_limit: bool
     jobs_included: int
     jobs_used: int
     max_file_mb: int

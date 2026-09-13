@@ -33,14 +33,14 @@ function EditNum({ value, onCommit, testId, suffix, disabled }: {
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(value));
-  if (disabled) return <div className="px-2 py-1.5 text-right font-mono text-base text-slate-600">—</div>;
+  if (disabled) return <div className="px-2 py-1.5 text-right font-mono text-base text-ink-4">—</div>;
   if (!editing) {
     return (
       <button
         type="button"
         data-testid={testId}
         onClick={() => { setDraft(String(value)); setEditing(true); }}
-        className="w-full rounded-sm px-2 py-1.5 text-right font-mono text-base font-semibold text-white transition-colors hover:bg-[#1C2712] hover:text-[#E2F952]"
+        className="w-full rounded-sm px-2 py-1.5 text-right font-mono text-base font-semibold text-ink transition-colors hover:bg-brand-soft hover:text-brand"
       >
         {num(value, value % 1 === 0 ? 0 : 2)}{suffix}
       </button>
@@ -229,24 +229,24 @@ export default function Takeoff() {
       <Panel className="gl-rise">
         <div className="flex flex-wrap items-start justify-between gap-6">
           <div className="max-w-3xl">
-            <p className="font-mono text-xs uppercase tracking-[0.2em] text-[#E2F952]">AI read brief</p>
-            <p className="mt-3 text-lg leading-relaxed text-slate-200" data-testid="takeoff-brief">
+            <p className="font-mono text-xs uppercase tracking-[0.2em] text-brand">AI read brief</p>
+            <p className="mt-3 text-lg leading-relaxed text-ink-2" data-testid="takeoff-brief">
               {job.data?.brief || "Upload a blueprint to generate a brief."}
             </p>
             {job.data?.cross_check_note && (
-              <p className="mt-3 text-sm text-slate-400" data-testid="takeoff-crosscheck">{job.data.cross_check_note}</p>
+              <p className="mt-3 text-sm text-ink-3" data-testid="takeoff-crosscheck">{job.data.cross_check_note}</p>
             )}
             {job.data?.scale && (
-              <p className="mt-3 inline-flex items-center gap-2 font-mono text-sm text-slate-400">
-                <Ruler className="h-4 w-4 text-[#E2F952]" /> Printed scale: {job.data.scale}
+              <p className="mt-3 inline-flex items-center gap-2 font-mono text-sm text-ink-3">
+                <Ruler className="h-4 w-4 text-brand" /> Printed scale: {job.data.scale}
               </p>
             )}
           </div>
           <div className="grid grid-cols-2 gap-x-8 gap-y-4 font-mono sm:grid-cols-4">
             {[["Buildings", job.data?.buildings ?? 0], ["Units", job.data?.units ?? 0], ["Bedrooms", job.data?.bedrooms ?? 0], ["Bathrooms", job.data?.bathrooms ?? 0]].map(([l, v]) => (
               <div key={String(l)}>
-                <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">{l}</div>
-                <div className="mt-1 text-2xl font-semibold text-white" data-testid={`brief-${String(l).toLowerCase()}`}>{v}</div>
+                <div className="text-[11px] uppercase tracking-[0.18em] text-ink-3">{l}</div>
+                <div className="mt-1 text-2xl font-semibold text-ink" data-testid={`brief-${String(l).toLowerCase()}`}>{v}</div>
               </div>
             ))}
           </div>
@@ -263,16 +263,16 @@ export default function Takeoff() {
       </Panel>
 
       {/* summary strip */}
-      <div className="mt-6 grid gap-px border border-slate-800/80 bg-slate-800/60 sm:grid-cols-4">
+      <div className="mt-6 grid gap-px border border-hairline/80 bg-hairline/60 sm:grid-cols-4">
         {[
           ["Lines", num(rows.length), "takeoff-count"],
           ["Total sq ft", num(totalSqft, 1), "takeoff-sqft"],
           ["Adhesive (gal)", num(totalGal, 1), "takeoff-gallons"],
           ["Flagged", num(flagged), "takeoff-flagged"],
         ].map(([l, v, id]) => (
-          <div key={l} className="bg-[#0F1722] px-5 py-4">
-            <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">{l}</div>
-            <div className="mt-1 font-mono text-2xl font-semibold text-white" data-testid={id}>{v}</div>
+          <div key={l} className="bg-surface px-5 py-4">
+            <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-ink-3">{l}</div>
+            <div className="mt-1 font-mono text-2xl font-semibold text-ink" data-testid={id}>{v}</div>
           </div>
         ))}
       </div>
@@ -282,15 +282,15 @@ export default function Takeoff() {
         <Panel>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
-              <h2 className="flex items-center gap-2 font-heading text-base font-semibold text-slate-100">
-                <ClipboardList className="h-4 w-4 text-[#E2F952]" /> Spec sheet / finish schedule
+              <h2 className="flex items-center gap-2 font-heading text-base font-semibold text-ink">
+                <ClipboardList className="h-4 w-4 text-brand" /> Spec sheet / finish schedule
               </h2>
-              <p className="mt-2 text-[15px] text-slate-400" data-testid="spec-status">
+              <p className="mt-2 text-[15px] text-ink-3" data-testid="spec-status">
                 {job.data?.spec_filename
                   ? `${job.data.spec_filename} — ${(job.data.specs ?? []).length} product mapping(s) on file`
                   : "No spec sheet yet. Add one and we'll put the specified product on each matching room."}
               </p>
-              {job.data?.spec_brief && <p className="mt-2 text-sm text-slate-500">{job.data.spec_brief}</p>}
+              {job.data?.spec_brief && <p className="mt-2 text-sm text-ink-3">{job.data.spec_brief}</p>}
             </div>
             {canEdit && (
               <div className="flex shrink-0 gap-2">
@@ -312,12 +312,12 @@ export default function Takeoff() {
           {(job.data?.specs ?? []).length > 0 && (
             <div className="mt-4 max-h-44 space-y-1.5 overflow-y-auto" data-testid="spec-list">
               {(job.data?.specs ?? []).map((sp, i) => (
-                <div key={`${sp.room_pattern}-${i}`} className="flex items-start justify-between gap-3 border-l-2 border-[#E2F952]/40 bg-[#131D2A] px-3 py-2">
+                <div key={`${sp.room_pattern}-${i}`} className="flex items-start justify-between gap-3 border-l-2 border-brand/40 bg-surface-2 px-3 py-2">
                   <div className="min-w-0">
-                    <div className="truncate font-mono text-xs text-[#E2F952]">{sp.room_pattern}{sp.surface === "wall" ? " (wall)" : ""}</div>
-                    <div className="truncate text-sm text-slate-300">{sp.product || sp.floor_type}</div>
+                    <div className="truncate font-mono text-xs text-brand">{sp.room_pattern}{sp.surface === "wall" ? " (wall)" : ""}</div>
+                    <div className="truncate text-sm text-ink-2">{sp.product || sp.floor_type}</div>
                   </div>
-                  <span className="shrink-0 font-mono text-[11px] text-slate-500">{sp.floor_type}</span>
+                  <span className="shrink-0 font-mono text-[11px] text-ink-3">{sp.floor_type}</span>
                 </div>
               ))}
             </div>
@@ -326,15 +326,15 @@ export default function Takeoff() {
 
         <Panel>
           <div className="flex items-center justify-between gap-4">
-            <h2 className="flex items-center gap-2 font-heading text-base font-semibold text-slate-100">
-              <Layers className="h-4 w-4 text-[#E2F952]" /> Unit templates
+            <h2 className="flex items-center gap-2 font-heading text-base font-semibold text-ink">
+              <Layers className="h-4 w-4 text-brand" /> Unit templates
             </h2>
-            <span className="font-mono text-xs text-slate-500">{(templates.data ?? []).length} saved</span>
+            <span className="font-mono text-xs text-ink-3">{(templates.data ?? []).length} saved</span>
           </div>
           {canEdit ? (
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label className="text-slate-300">Save a unit as a template</Label>
+                <Label className="text-ink-2">Save a unit as a template</Label>
                 <Select value={tplUnitSource} onValueChange={(v: string) => setTplUnitSource(v)}>
                   <SelectTrigger className="h-11" data-testid="tpl-source-select">
                     <SelectValue placeholder="Pick a unit" />
@@ -353,7 +353,7 @@ export default function Takeoff() {
                 </Button>
               </div>
               <div className="space-y-2">
-                <Label className="text-slate-300">Apply to matching units</Label>
+                <Label className="text-ink-2">Apply to matching units</Label>
                 <Select value={applyTplId} onValueChange={(v: string) => setApplyTplId(v)}>
                   <SelectTrigger className="h-11" data-testid="tpl-apply-select">
                     <SelectValue placeholder="Pick a template" />
@@ -375,14 +375,14 @@ export default function Takeoff() {
               </div>
             </div>
           ) : (
-            <p className="mt-4 text-[15px] text-slate-400">Your role is read-only.</p>
+            <p className="mt-4 text-[15px] text-ink-3">Your role is read-only.</p>
           )}
         </Panel>
       </div>
 
       {/* line items */}
       <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="font-heading text-xl font-semibold text-slate-100">Line items — tap any number to edit</h2>
+        <h2 className="font-heading text-xl font-semibold text-ink">Line items — tap any number to edit</h2>
         <div className="flex flex-wrap gap-2">
           <Button variant="ghost" data-testid="advanced-toggle" onClick={() => setAdvanced((a) => !a)}>
             <Sliders className="h-4 w-4" /> {advanced ? "Hide advanced" : "Advanced"}
@@ -405,7 +405,7 @@ export default function Takeoff() {
 
       {advanced && (
         <Panel className="mt-3">
-          <p className="text-[15px] text-slate-300">
+          <p className="text-[15px] text-ink-2">
             <b>Scope</b> decides what gets billed on a line: <b>Supply &amp; Install</b> charges material + labor,
             <b> Install Only</b> charges labor alone (the GC supplies the material), <b>Supply Only</b> charges material
             alone, and <b>Miscellaneous</b> is a flat price for prep, leveling, demo, trims or cove base.
@@ -416,21 +416,21 @@ export default function Takeoff() {
 
       {rows.length === 0 && (
         <Panel className="mt-4 text-center">
-          <p className="text-slate-300" data-testid="takeoff-empty">No takeoff lines yet. Upload a blueprint or add a line manually.</p>
+          <p className="text-ink-2" data-testid="takeoff-empty">No takeoff lines yet. Upload a blueprint or add a line manually.</p>
         </Panel>
       )}
 
       <div className="mt-4 space-y-8" data-testid="takeoff-groups">
         {grouped.map(([group, items]) => (
-          <div key={group} className="border border-slate-800/80 bg-[#0F1722]">
-            <div className="flex items-center justify-between border-b border-slate-800 px-5 py-3">
-              <h3 className="font-mono text-sm uppercase tracking-[0.18em] text-[#E2F952]">{group}</h3>
-              <span className="font-mono text-sm text-slate-400">{money(items.reduce((a, b) => a + b.cost, 0))}</span>
+          <div key={group} className="border border-hairline/80 bg-surface">
+            <div className="flex items-center justify-between border-b border-hairline px-5 py-3">
+              <h3 className="font-mono text-sm uppercase tracking-[0.18em] text-brand">{group}</h3>
+              <span className="font-mono text-sm text-ink-3">{money(items.reduce((a, b) => a + b.cost, 0))}</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1180px] text-left">
                 <thead>
-                  <tr className="border-b border-slate-800 font-mono text-[11px] uppercase tracking-wider text-slate-500">
+                  <tr className="border-b border-hairline font-mono text-[11px] uppercase tracking-wider text-ink-3">
                     <th className="px-4 py-3">Room</th>
                     <th className="px-3 py-3">Scope</th>
                     <th className="px-4 py-3">Floor / item</th>
@@ -449,10 +449,10 @@ export default function Takeoff() {
                     const misc = l.scope === "misc";
                     return (
                       <tr key={l.id} data-testid={`line-row-${l.id}`}
-                          className={cn("border-b border-slate-800/60 align-middle", l.needs_review && "bg-amber-500/5")}>
+                          className={cn("border-b border-hairline/60 align-middle", l.needs_review && "bg-amber-500/5")}>
                         <td className="px-4 py-3">
-                          <div className="text-base font-medium text-slate-100" data-testid={`line-room-${l.id}`}>{l.room}</div>
-                          {l.product && <div className="mt-0.5 max-w-[220px] truncate font-mono text-[11px] text-[#E2F952]" data-testid={`line-product-${l.id}`}>{l.product}</div>}
+                          <div className="text-base font-medium text-ink" data-testid={`line-room-${l.id}`}>{l.room}</div>
+                          {l.product && <div className="mt-0.5 max-w-[220px] truncate font-mono text-[11px] text-brand" data-testid={`line-product-${l.id}`}>{l.product}</div>}
                           {l.needs_review && (
                             <span className="mt-1 inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-wider text-amber-300">
                               <AlertTriangle className="h-3 w-3" /> review
@@ -469,12 +469,12 @@ export default function Takeoff() {
                               </SelectContent>
                             </Select>
                           ) : (
-                            <span className="font-mono text-xs text-slate-400" data-testid={`line-scope-${l.id}`}>{SCOPE_SHORT[l.scope]}</span>
+                            <span className="font-mono text-xs text-ink-3" data-testid={`line-scope-${l.id}`}>{SCOPE_SHORT[l.scope]}</span>
                           )}
                         </td>
                         <td className="px-4 py-3">
                           {misc ? (
-                            <span className="font-mono text-xs uppercase tracking-wider text-slate-500" data-testid={`line-floortype-${l.id}`}>flat price</span>
+                            <span className="font-mono text-xs uppercase tracking-wider text-ink-3" data-testid={`line-floortype-${l.id}`}>flat price</span>
                           ) : canEdit ? (
                             <Select value={l.floor_type} onValueChange={(v: string) => patch.mutate({ id: l.id, body: { floor_type: v } })}>
                               <SelectTrigger className="h-10 w-[180px]" data-testid={`line-floortype-${l.id}`}><SelectValue /></SelectTrigger>
@@ -483,7 +483,7 @@ export default function Takeoff() {
                               </SelectContent>
                             </Select>
                           ) : (
-                            <span className="text-sm text-slate-300" data-testid={`line-floortype-${l.id}`}>{l.floor_type}</span>
+                            <span className="text-sm text-ink-2" data-testid={`line-floortype-${l.id}`}>{l.floor_type}</span>
                           )}
                         </td>
                         <td className="px-3 py-3">
@@ -495,10 +495,10 @@ export default function Takeoff() {
                                    onCommit={(v) => patch.mutate({ id: l.id, body: { waste_pct: v } })} />
                         </td>
                         {advanced && (
-                          <td className="px-4 py-3 text-sm text-slate-400" data-testid={`line-adhesive-${l.id}`}>{l.adhesive || "—"}</td>
+                          <td className="px-4 py-3 text-sm text-ink-3" data-testid={`line-adhesive-${l.id}`}>{l.adhesive || "—"}</td>
                         )}
                         {advanced && (
-                          <td className="px-3 py-3 text-right font-mono text-base text-slate-300" data-testid={`line-gallons-${l.id}`}>
+                          <td className="px-3 py-3 text-right font-mono text-base text-ink-2" data-testid={`line-gallons-${l.id}`}>
                             {misc ? "—" : num(l.adhesive_gallons, 2)}
                           </td>
                         )}
@@ -515,7 +515,7 @@ export default function Takeoff() {
                             <EditNum testId={`line-flat-${l.id}`} value={l.flat_cost}
                                      onCommit={(v) => patch.mutate({ id: l.id, body: { flat_cost: v } })} />
                           ) : (
-                            <div className="text-right font-mono text-base font-semibold text-[#E2F952]" data-testid={`line-cost-${l.id}`}>
+                            <div className="text-right font-mono text-base font-semibold text-brand" data-testid={`line-cost-${l.id}`}>
                               {money(l.cost)}
                             </div>
                           )}
@@ -523,7 +523,7 @@ export default function Takeoff() {
                         <td className="px-3 py-3 text-right">
                           {canEdit && (
                             <Button variant="ghost" size="icon-sm" data-testid={`line-delete-${l.id}`} onClick={() => delLine.mutate(l.id)}>
-                              <Trash2 className="h-4 w-4 text-slate-500" />
+                              <Trash2 className="h-4 w-4 text-ink-3" />
                             </Button>
                           )}
                         </td>
@@ -540,8 +540,8 @@ export default function Takeoff() {
       {/* bid vs actual */}
       {costing.data && (
         <Panel className="mt-8">
-          <h2 className="font-heading text-lg font-semibold text-slate-100">Bid vs actual</h2>
-          <div className="mt-4 grid gap-px border border-slate-800/80 bg-slate-800/60 sm:grid-cols-2 lg:grid-cols-5">
+          <h2 className="font-heading text-lg font-semibold text-ink">Bid vs actual</h2>
+          <div className="mt-4 grid gap-px border border-hairline/80 bg-hairline/60 sm:grid-cols-2 lg:grid-cols-5">
             {[
               ["Quoted", money(costing.data.quoted_total), "costing-quoted"],
               ["Material in bid", money(costing.data.quoted_material), "costing-material"],
@@ -549,15 +549,15 @@ export default function Takeoff() {
               ["Actual spend", money(costing.data.actual_expenses), "costing-actual"],
               [`Margin ${costing.data.margin_pct}%`, money(costing.data.variance), "costing-variance"],
             ].map(([l, v, id]) => (
-              <div key={l} className="bg-[#0F1722] px-5 py-4">
-                <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">{l}</div>
+              <div key={l} className="bg-surface px-5 py-4">
+                <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-ink-3">{l}</div>
                 <div className={cn("mt-1 font-mono text-xl font-semibold",
-                  id === "costing-variance" ? (costing.data.variance >= 0 ? "text-[#E2F952]" : "text-red-400") : "text-white")}
+                  id === "costing-variance" ? (costing.data.variance >= 0 ? "text-brand" : "text-red-400") : "text-ink")}
                   data-testid={id}>{v}</div>
               </div>
             ))}
           </div>
-          <p className="mt-3 text-sm text-slate-500">
+          <p className="mt-3 text-sm text-ink-3">
             Actual spend counts the {costing.data.expense_count} expense(s) tagged to this job on the Profit page.
           </p>
         </Panel>
@@ -567,7 +567,7 @@ export default function Takeoff() {
       <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_420px]">
         <Panel>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="font-heading text-lg font-semibold text-slate-100">Quote history</h2>
+            <h2 className="font-heading text-lg font-semibold text-ink">Quote history</h2>
             {quoteList.length > 1 && (
               <Dialog>
                 <DialogTrigger
@@ -581,7 +581,7 @@ export default function Takeoff() {
                   <DialogHeader><DialogTitle>What changed between revisions</DialogTitle></DialogHeader>
                   <div className="space-y-4">
                     <div className="flex flex-wrap items-center gap-3">
-                      <span className="font-mono text-sm text-slate-400">Compare {latest?.number} against</span>
+                      <span className="font-mono text-sm text-ink-3">Compare {latest?.number} against</span>
                       <Select value={diffAgainst ?? ""} onValueChange={(v: string) => setDiffAgainst(v)}>
                         <SelectTrigger className="h-10 w-[240px]" data-testid="diff-against-select"><SelectValue /></SelectTrigger>
                         <SelectContent>
@@ -593,16 +593,16 @@ export default function Takeoff() {
                     </div>
                     {diff.data && (
                       <>
-                        <div className="grid grid-cols-3 gap-px border border-slate-800 bg-slate-800/60">
+                        <div className="grid grid-cols-3 gap-px border border-hairline bg-hairline/60">
                           {[
                             [`Rev ${diff.data.from_revision}`, money(diff.data.from_total), "diff-from-total"],
                             [`Rev ${diff.data.to_revision}`, money(diff.data.to_total), "diff-to-total"],
                             ["Change", `${diff.data.delta >= 0 ? "+" : ""}${money(diff.data.delta)}`, "diff-delta"],
                           ].map(([l, v, id]) => (
-                            <div key={l} className="bg-[#0F1722] px-4 py-3">
-                              <div className="font-mono text-[11px] uppercase tracking-widest text-slate-500">{l}</div>
+                            <div key={l} className="bg-surface px-4 py-3">
+                              <div className="font-mono text-[11px] uppercase tracking-widest text-ink-3">{l}</div>
                               <div className={cn("mt-1 font-mono text-lg font-semibold",
-                                id === "diff-delta" ? (diff.data.delta >= 0 ? "text-[#E2F952]" : "text-red-400") : "text-white")}
+                                id === "diff-delta" ? (diff.data.delta >= 0 ? "text-brand" : "text-red-400") : "text-ink")}
                                 data-testid={id}>{v}</div>
                             </div>
                           ))}
@@ -610,10 +610,10 @@ export default function Takeoff() {
                         <div className="max-h-[320px] space-y-1.5 overflow-y-auto" data-testid="diff-lines">
                           {diff.data.lines.filter((l) => l.change !== "unchanged").map((l) => (
                             <div key={l.key} data-testid={`diff-row-${l.change}`}
-                                 className="flex flex-wrap items-center justify-between gap-3 border border-slate-800 bg-[#131D2A] px-3 py-2">
+                                 className="flex flex-wrap items-center justify-between gap-3 border border-hairline bg-surface-2 px-3 py-2">
                               <div className="min-w-0">
-                                <div className="truncate text-[15px] text-slate-100">{l.room}</div>
-                                <div className="truncate font-mono text-[11px] text-slate-500">
+                                <div className="truncate text-[15px] text-ink">{l.room}</div>
+                                <div className="truncate font-mono text-[11px] text-ink-3">
                                   {l.building} › {l.unit}{l.fields.length ? ` · ${l.fields.join(", ")}` : ""}
                                 </div>
                               </div>
@@ -622,14 +622,14 @@ export default function Takeoff() {
                                   l.change === "added" ? "text-emerald-400" : l.change === "removed" ? "text-red-400" : "text-amber-300")}>
                                   {l.change}
                                 </span>
-                                <span className="text-slate-500">{money(l.old_cost)}</span>
-                                <span className="text-slate-600">→</span>
-                                <span className="font-semibold text-white">{money(l.new_cost)}</span>
+                                <span className="text-ink-3">{money(l.old_cost)}</span>
+                                <span className="text-ink-4">→</span>
+                                <span className="font-semibold text-ink">{money(l.new_cost)}</span>
                               </div>
                             </div>
                           ))}
                           {diff.data.lines.every((l) => l.change === "unchanged") && (
-                            <p className="text-slate-400" data-testid="diff-no-changes">No line changed between these revisions.</p>
+                            <p className="text-ink-3" data-testid="diff-no-changes">No line changed between these revisions.</p>
                           )}
                         </div>
                       </>
@@ -640,15 +640,15 @@ export default function Takeoff() {
             )}
           </div>
 
-          {quoteList.length === 0 && <p className="mt-3 text-slate-400" data-testid="quote-history-empty">No quote yet. Create one from the approved lines.</p>}
+          {quoteList.length === 0 && <p className="mt-3 text-ink-3" data-testid="quote-history-empty">No quote yet. Create one from the approved lines.</p>}
           <div className="mt-4 space-y-3" data-testid="quote-history">
             {quoteList.map((q) => (
-              <div key={q.id} data-testid={`quote-row-${q.id}`} className="flex flex-wrap items-center justify-between gap-3 border border-slate-800 bg-[#131D2A] px-4 py-3">
+              <div key={q.id} data-testid={`quote-row-${q.id}`} className="flex flex-wrap items-center justify-between gap-3 border border-hairline bg-surface-2 px-4 py-3">
                 <div>
-                  <div className="font-mono text-base text-slate-100">{q.number}</div>
-                  <div className="font-mono text-xs text-slate-500">Revision {q.revision} · {new Date(q.created_at).toLocaleDateString()}</div>
+                  <div className="font-mono text-base text-ink">{q.number}</div>
+                  <div className="font-mono text-xs text-ink-3">Revision {q.revision} · {new Date(q.created_at).toLocaleDateString()}</div>
                 </div>
-                <div className="font-mono text-lg font-semibold text-white">{money(q.total)}</div>
+                <div className="font-mono text-lg font-semibold text-ink">{money(q.total)}</div>
                 <StatusBadge status={q.status} testId={`quote-status-${q.id}`} />
                 <div className="flex flex-wrap gap-2">
                   <a
@@ -676,32 +676,32 @@ export default function Takeoff() {
             ))}
           </div>
           {latest && (
-            <p className="mt-4 text-sm text-slate-500">
+            <p className="mt-4 text-sm text-ink-3">
               Creating a new quote makes a change order: revision {latest.revision + 1} is added and the earlier revisions stay on record.
             </p>
           )}
-          <Link to="/invoices" className="mt-4 inline-block font-mono text-xs uppercase tracking-widest text-[#E2F952] hover:underline" data-testid="takeoff-invoices-link">
+          <Link to="/invoices" className="mt-4 inline-block font-mono text-xs uppercase tracking-widest text-brand hover:underline" data-testid="takeoff-invoices-link">
             Go to invoices →
           </Link>
         </Panel>
 
         <Panel className="h-fit">
-          <h2 className="font-heading text-lg font-semibold text-slate-100">Totals</h2>
+          <h2 className="font-heading text-lg font-semibold text-ink">Totals</h2>
           <dl className="mt-4 space-y-3 font-mono text-base">
-            <div className="flex justify-between text-slate-300"><dt>Subtotal</dt><dd data-testid="totals-subtotal">{money(subtotal)}</dd></div>
+            <div className="flex justify-between text-ink-2"><dt>Subtotal</dt><dd data-testid="totals-subtotal">{money(subtotal)}</dd></div>
             <div className="flex items-center justify-between gap-3">
-              <Label htmlFor="discount" className="text-slate-300">Discount %</Label>
+              <Label htmlFor="discount" className="text-ink-2">Discount %</Label>
               <Input id="discount" type="number" step="0.5" data-testid="discount-input" value={discount}
                      onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)} className="h-10 w-28 text-right font-mono" />
             </div>
-            <div className="flex justify-between text-slate-400"><dt>Discount</dt><dd data-testid="totals-discount">−{money(discAmt)}</dd></div>
+            <div className="flex justify-between text-ink-3"><dt>Discount</dt><dd data-testid="totals-discount">−{money(discAmt)}</dd></div>
             <div className="flex items-center justify-between gap-3">
-              <Label htmlFor="tax" className="text-slate-300">{settings.data?.tax_label ?? "Tax"} %</Label>
+              <Label htmlFor="tax" className="text-ink-2">{settings.data?.tax_label ?? "Tax"} %</Label>
               <Input id="tax" type="number" step="0.05" data-testid="tax-input" value={effTax}
                      onChange={(e) => setTaxRate(parseFloat(e.target.value) || 0)} className="h-10 w-28 text-right font-mono" />
             </div>
-            <div className="flex justify-between text-slate-400"><dt>Tax</dt><dd data-testid="totals-tax">{money(taxAmt)}</dd></div>
-            <div className="flex justify-between border-t border-slate-800 pt-4 text-xl font-semibold text-white">
+            <div className="flex justify-between text-ink-3"><dt>Tax</dt><dd data-testid="totals-tax">{money(taxAmt)}</dd></div>
+            <div className="flex justify-between border-t border-hairline pt-4 text-xl font-semibold text-ink">
               <dt>Grand total</dt><dd data-testid="totals-grand">{money(grand)}</dd>
             </div>
           </dl>
@@ -714,7 +714,7 @@ export default function Takeoff() {
           {/* The client pay link belongs to an INVOICE, not a quote — it lives on /invoices. */}
           {latest?.status === "accepted" && (
             <Link to="/invoices" data-testid="takeoff-pay-link-hint"
-                  className="mt-3 flex items-center justify-center gap-2 border border-slate-700 px-4 py-2.5 font-mono text-xs uppercase tracking-widest text-slate-300 transition-colors hover:border-[#E2F952]/50 hover:text-[#E2F952]">
+                  className="mt-3 flex items-center justify-center gap-2 border border-hairline px-4 py-2.5 font-mono text-xs uppercase tracking-widest text-ink-2 transition-colors hover:border-brand/50 hover:text-brand">
               <Link2 className="h-4 w-4" /> Get client pay link
             </Link>
           )}

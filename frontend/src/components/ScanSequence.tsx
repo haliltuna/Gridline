@@ -93,22 +93,22 @@ export default function ScanSequence({
   return (
     <div
       data-testid="scan-sequence"
-      className="overflow-hidden border border-slate-800 bg-[#0B121A]"
+      className="overflow-hidden border border-hairline bg-base-2"
     >
       {/* readout header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-[#0F1722] px-4 py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hairline bg-surface px-4 py-2.5">
         <div className="flex items-center gap-2">
-          <span className={cn("h-2 w-2 rounded-full", running ? "bg-[#E2F952] animate-pulse" : "bg-slate-600")} />
-          <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-[#E2F952]">
+          <span className={cn("h-2 w-2 rounded-full", running ? "bg-brand animate-pulse" : "bg-ink-4")} />
+          <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-brand">
             {running ? "Reading blueprint" : "Reader idle"}
           </span>
         </div>
-        <span className="max-w-[40%] truncate font-mono text-[11px] text-slate-500">{filename}</span>
+        <span className="max-w-[40%] truncate font-mono text-[11px] text-ink-3">{filename}</span>
       </div>
 
       <div className={cn("grid gap-0", compact ? "" : "lg:grid-cols-[1.35fr_1fr]")}>
         {/* ---- the plan being measured ---- */}
-        <div className="relative border-b border-slate-800 lg:border-b-0 lg:border-r">
+        <div className="relative border-b border-hairline lg:border-b-0 lg:border-r">
           <div className="gl-grid absolute inset-0 opacity-30" />
           <svg viewBox="0 0 300 190" className="relative block w-full" role="img" aria-label="Blueprint being measured">
             {/* wall outlines always visible, faint */}
@@ -163,11 +163,11 @@ export default function ScanSequence({
           </svg>
 
           {/* scale chip */}
-          <div className="absolute bottom-3 left-3 flex items-center gap-2 border border-slate-700 bg-[#0B121A]/90 px-2.5 py-1.5">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-slate-500">Scale</span>
+          <div className="absolute bottom-3 left-3 flex items-center gap-2 border border-hairline bg-base-2/90 px-2.5 py-1.5">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-ink-3">Scale</span>
             <span
               data-testid="scan-scale"
-              className={cn("font-mono text-[11px]", scaleLocked ? "text-[#E2F952]" : "text-slate-600")}
+              className={cn("font-mono text-[11px]", scaleLocked ? "text-brand" : "text-ink-4")}
             >
               {scaleLocked ? "1/4\" = 1'-0\" LOCKED" : "detecting…"}
             </span>
@@ -178,31 +178,31 @@ export default function ScanSequence({
         <div className="p-4">
           <div className="flex items-end justify-between gap-4">
             <div>
-              <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-slate-500">Measured</div>
-              <div className="font-mono text-4xl font-semibold leading-none text-white" data-testid="scan-sqft">
+              <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-ink-3">Measured</div>
+              <div className="font-mono text-4xl font-semibold leading-none text-ink" data-testid="scan-sqft">
                 {runningSqft.toLocaleString()}
-                <span className="ml-1 text-base text-slate-500">SF</span>
+                <span className="ml-1 text-base text-ink-3">SF</span>
               </div>
             </div>
             <div className="text-right">
-              <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-slate-500">Rooms</div>
-              <div className="font-mono text-2xl font-semibold text-[#E2F952]" data-testid="scan-rooms">
+              <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-ink-3">Rooms</div>
+              <div className="font-mono text-2xl font-semibold text-brand" data-testid="scan-rooms">
                 {measured.length}/{ROOMS.length}
               </div>
             </div>
           </div>
 
           {/* progress */}
-          <div className="mt-4 h-1.5 w-full bg-slate-800">
+          <div className="mt-4 h-1.5 w-full bg-hairline">
             <div
-              className="h-full bg-[#E2F952] transition-[width] duration-200 ease-linear"
+              className="h-full bg-brand transition-[width] duration-200 ease-linear"
               style={{ width: `${pct}%` }}
               data-testid="scan-progress"
             />
           </div>
-          <div className="mt-2 font-mono text-[11px] text-slate-400" data-testid="scan-stage">
+          <div className="mt-2 font-mono text-[11px] text-ink-3" data-testid="scan-stage">
             {STAGES[stageIndex]}
-            <span className="text-[#E2F952]">{running ? " ▍" : ""}</span>
+            <span className="text-brand">{running ? " ▍" : ""}</span>
           </div>
 
           {/* rolling capture log */}
@@ -210,18 +210,18 @@ export default function ScanSequence({
             {measured.slice(-5).reverse().map((r) => (
               <div
                 key={r.id}
-                className="flex items-center justify-between gap-3 border-l-2 border-[#E2F952]/50 bg-[#0F1722] px-2.5 py-1.5"
+                className="flex items-center justify-between gap-3 border-l-2 border-brand/50 bg-surface px-2.5 py-1.5"
                 style={{ animation: "gl-rise 220ms ease-out both" }}
               >
                 <div className="min-w-0">
-                  <div className="truncate font-mono text-[11px] text-slate-200">{r.label}</div>
-                  <div className="truncate font-mono text-[10px] text-slate-500">{r.dim} · {r.floor}</div>
+                  <div className="truncate font-mono text-[11px] text-ink-2">{r.label}</div>
+                  <div className="truncate font-mono text-[10px] text-ink-3">{r.dim} · {r.floor}</div>
                 </div>
-                <span className="shrink-0 font-mono text-[11px] font-semibold text-[#E2F952]">{r.sqft} SF</span>
+                <span className="shrink-0 font-mono text-[11px] font-semibold text-brand">{r.sqft} SF</span>
               </div>
             ))}
             {measured.length === 0 && (
-              <p className="font-mono text-[11px] text-slate-600">Waiting for the first dimension string…</p>
+              <p className="font-mono text-[11px] text-ink-4">Waiting for the first dimension string…</p>
             )}
           </div>
         </div>

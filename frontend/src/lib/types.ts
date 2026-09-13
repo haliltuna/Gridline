@@ -399,6 +399,9 @@ export interface Usage {
   period: string;
   pages_included: number;
   pages_used: number;
+  pages_remaining: number;
+  limit_reached: boolean;
+  near_limit: boolean;
   jobs_included: number;
   jobs_used: number;
   max_file_mb: number;

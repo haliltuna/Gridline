@@ -19,7 +19,7 @@ export default function Home() {
     // The marker attribute below lets the platform probe detect the stock splash — remove it with this page
     <div
       data-emergent-splash
-      className="flex min-h-svh flex-col items-center justify-center bg-[#0f0f10] text-[calc(10px+2vmin)] text-white"
+      className="flex min-h-svh flex-col items-center justify-center bg-[#0f0f10] text-[calc(10px+2vmin)] text-ink"
     >
       <a href="https://emergent.sh" target="_blank" rel="noopener noreferrer">
         <img

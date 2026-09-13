@@ -87,10 +87,24 @@ async def upload_blueprint(job_id: str, file: UploadFile = File(...), user: dict
         prior = await db.jobs.find({"user_id": account_id(user), "created_at": window},
                                    {"_id": 0, "pages": 1, "pages_read": 1, "id": 1}).to_list(2000)
         used_pages = sum(int(j.get("pages_read") or j.get("pages") or 0) for j in prior if j["id"] != job_id)
-        if plan["overage_per_page"] <= 0 and used_pages >= plan["pages_included"]:
+        remaining = plan["pages_included"] - used_pages
+        # Count the incoming set BEFORE spending a single Opus call: there is no overage
+        # billing, so a set that does not fit is refused rather than partly paid for by us.
+        try:
+            import pymupdf
+
+            incoming = pymupdf.open(stream=raw, filetype="pdf").page_count
+        except Exception:  # noqa: BLE001 — unreadable PDFs are handled by read_blueprint below
+            incoming = 1
+        if remaining <= 0:
             raise HTTPException(status_code=402, detail=(
-                f"{plan['name']} includes {plan['pages_included']} blueprint pages and you have read "
-                f"{used_pages}. Upgrade on the Billing page to keep going."))
+                f"{plan['name']} includes {plan['pages_included']} blueprint pages per period and you "
+                f"have used all {used_pages}. Upgrade on the Billing page to read another set."))
+        if incoming > remaining:
+            raise HTTPException(status_code=402, detail=(
+                f"That set is {incoming} pages but only {remaining} of your {plan['pages_included']} "
+                f"{plan['name']} pages are left this period. Upgrade on the Billing page, or upload a "
+                f"smaller portion of the set."))
 
     try:
         result = await read_blueprint(raw, file.filename or "blueprint.pdf")

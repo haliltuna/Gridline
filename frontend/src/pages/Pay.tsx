@@ -53,18 +53,18 @@ export default function Pay() {
   const confirming = Boolean(sessionId) && !paid && status.data?.payment_status !== "paid";
 
   return (
-    <div className="relative grid min-h-screen place-items-center overflow-hidden bg-[#090D12] px-5 py-12">
+    <div className="relative grid min-h-screen place-items-center overflow-hidden bg-base px-5 py-12">
       <div className="gl-grid absolute inset-0 opacity-25" />
       <div className="relative w-full max-w-lg gl-rise">
         <div className="mb-6 flex items-center justify-between">
           <Logo />
-          <span className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-slate-500">
+          <span className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-ink-3">
             <Lock className="h-3.5 w-3.5" /> Stripe secure checkout
           </span>
         </div>
 
         {inv.isLoading && (
-          <div className="border border-slate-800 bg-[#0F1722] p-8 text-slate-300" data-testid="pay-loading">
+          <div className="border border-hairline bg-surface p-8 text-ink-2" data-testid="pay-loading">
             Loading your invoice…
           </div>
         )}
@@ -77,24 +77,24 @@ export default function Pay() {
         )}
 
         {d && (
-          <div className="border border-slate-800 bg-[#0F1722]">
-            <div className="border-b border-slate-800 px-7 py-6">
-              <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-[#E2F952]">
+          <div className="border border-hairline bg-surface">
+            <div className="border-b border-hairline px-7 py-6">
+              <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-brand">
                 Invoice from {d.company_name}
               </p>
-              <h1 className="mt-2 font-heading text-3xl font-bold text-slate-100" data-testid="pay-number">
+              <h1 className="mt-2 font-heading text-3xl font-bold text-ink" data-testid="pay-number">
                 {d.number}
               </h1>
-              <p className="mt-1 text-[15px] text-slate-400">{d.job_name}</p>
+              <p className="mt-1 text-[15px] text-ink-3">{d.job_name}</p>
             </div>
 
             <dl className="space-y-3 px-7 py-6 font-mono text-base">
-              <div className="flex justify-between text-slate-300"><dt>Subtotal</dt><dd>{money(d.subtotal)}</dd></div>
+              <div className="flex justify-between text-ink-2"><dt>Subtotal</dt><dd>{money(d.subtotal)}</dd></div>
               {d.discount_amount > 0 && (
-                <div className="flex justify-between text-slate-400"><dt>Discount</dt><dd>−{money(d.discount_amount)}</dd></div>
+                <div className="flex justify-between text-ink-3"><dt>Discount</dt><dd>−{money(d.discount_amount)}</dd></div>
               )}
-              <div className="flex justify-between text-slate-400"><dt>{d.tax_label}</dt><dd>{money(d.tax_amount)}</dd></div>
-              <div className="flex justify-between border-t border-slate-800 pt-4 text-2xl font-semibold text-white">
+              <div className="flex justify-between text-ink-3"><dt>{d.tax_label}</dt><dd>{money(d.tax_amount)}</dd></div>
+              <div className="flex justify-between border-t border-hairline pt-4 text-2xl font-semibold text-ink">
                 <dt>Amount due</dt><dd data-testid="pay-total">{money(d.total)}</dd>
               </div>
             </dl>
@@ -117,8 +117,8 @@ export default function Pay() {
                   </p>
                 )}
                 {confirming && (
-                  <p className="flex items-center gap-2 border border-slate-700 bg-[#131D2A] px-4 py-3 text-sm text-slate-300" data-testid="pay-confirming">
-                    <Loader2 className="h-4 w-4 animate-spin text-[#E2F952]" /> Confirming your payment with Stripe…
+                  <p className="flex items-center gap-2 border border-hairline bg-surface-2 px-4 py-3 text-sm text-ink-2" data-testid="pay-confirming">
+                    <Loader2 className="h-4 w-4 animate-spin text-brand" /> Confirming your payment with Stripe…
                   </p>
                 )}
                 <Button size="lg" className="w-full font-semibold" data-testid="pay-submit-button"
@@ -126,7 +126,7 @@ export default function Pay() {
                   <CreditCard className="h-4 w-4" />
                   {checkout.isPending ? "Opening secure checkout…" : `Pay ${money(d.total)} by card`}
                 </Button>
-                <p className="text-center font-mono text-[11px] text-slate-600">
+                <p className="text-center font-mono text-[11px] text-ink-4">
                   Card details are entered on Stripe, never on this page. TEST MODE — use 4242 4242 4242 4242.
                 </p>
               </div>

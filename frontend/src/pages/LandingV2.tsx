@@ -7,6 +7,7 @@ import { apiGet, apiPost } from "@/lib/api";
 import type { CostModel, Lead, PlanTier } from "@/lib/types";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import ThemeSwitcher from "@/components/ThemeSwitcher";
 import { cn } from "@/lib/utils";
 
 // DESIGN VARIATION (route /v2). Same dark technical-readout DNA, deliberately different
@@ -48,21 +49,24 @@ export default function LandingV2() {
   });
 
   return (
-    <div className="min-h-screen bg-[#07090C] text-slate-100">
+    <div className="min-h-screen bg-base text-ink">
       {/* top ticker instead of a nav bar full of links */}
-      <div className="overflow-hidden border-b border-slate-800/70 bg-[#0B0F14]">
-        <div className="mx-auto flex max-w-[1240px] items-center justify-between gap-6 px-6 py-3 font-mono text-[11px] uppercase tracking-[0.22em] text-slate-500">
-          <span className="text-[#E2F952]">Gridline / takeoff engine</span>
+      <div className="overflow-hidden border-b border-hairline/70 bg-base-2">
+        <div className="mx-auto flex max-w-[1240px] items-center justify-between gap-6 px-6 py-3 font-mono text-[11px] uppercase tracking-[0.22em] text-ink-3">
+          <span className="text-brand">Gridline / takeoff engine</span>
           <span className="hidden md:inline">Opus vision · 200 DPI · 12 floor types · waste + adhesive logic</span>
-          <Link to="/login" data-testid="v2-login-link" className="hover:text-[#E2F952]">Sign in →</Link>
+          <div className="flex items-center gap-3">
+            <ThemeSwitcher compact />
+            <Link to="/login" data-testid="v2-login-link" className="hover:text-brand">Sign in →</Link>
+          </div>
         </div>
       </div>
 
       {/* hero: editorial, type-led, asymmetric */}
       <section className="mx-auto grid max-w-[1240px] gap-10 px-6 py-24 lg:grid-cols-[0.42fr_0.58fr]">
-        <div className="border-l-2 border-[#E2F952] pl-6">
-          <p className="font-mono text-xs uppercase tracking-[0.24em] text-slate-500">Variation 02</p>
-          <p className="mt-8 font-mono text-sm leading-relaxed text-slate-400">
+        <div className="border-l-2 border-brand pl-6">
+          <p className="font-mono text-xs uppercase tracking-[0.24em] text-ink-3">Variation 02</p>
+          <p className="mt-8 font-mono text-sm leading-relaxed text-ink-3">
             Commercial and multi-family flooring. One job, forty buildings, nine hundred rooms —
             read, measured and priced without a scale ruler.
           </p>
@@ -71,22 +75,22 @@ export default function LandingV2() {
                   className={cn(buttonVariants({ size: "lg" }), "w-fit font-semibold")}>
               Start the 14-day trial <ArrowUpRight className="h-4 w-4" />
             </Link>
-            <Link to="/" data-testid="v2-back-link" className="w-fit font-mono text-xs uppercase tracking-widest text-slate-500 hover:text-[#E2F952]">
+            <Link to="/" data-testid="v2-back-link" className="w-fit font-mono text-xs uppercase tracking-widest text-ink-3 hover:text-brand">
               ← see design v1
             </Link>
           </div>
         </div>
         <div>
-          <h1 className="font-heading text-[13vw] font-bold leading-[0.86] tracking-tighter text-slate-50 lg:text-[7.4rem]">
+          <h1 className="font-heading text-[13vw] font-bold leading-[0.86] tracking-tighter text-ink lg:text-[7.4rem]">
             MEASURE<br />
-            <span className="text-[#E2F952]">NOTHING.</span><br />
+            <span className="text-brand">NOTHING.</span><br />
             BID<br />EVERYTHING.
           </h1>
-          <div className="mt-10 grid grid-cols-3 border-t border-slate-800 pt-6 font-mono">
+          <div className="mt-10 grid grid-cols-3 border-t border-hairline pt-6 font-mono">
             {[["280+", "pages / set"], ["6 min", "set → quote"], ["12", "floor types"]].map(([v, l]) => (
               <div key={l}>
-                <div className="text-3xl font-semibold text-[#E2F952]">{v}</div>
-                <div className="mt-1 text-[11px] uppercase tracking-[0.18em] text-slate-500">{l}</div>
+                <div className="text-3xl font-semibold text-brand">{v}</div>
+                <div className="mt-1 text-[11px] uppercase tracking-[0.18em] text-ink-3">{l}</div>
               </div>
             ))}
           </div>
@@ -94,7 +98,7 @@ export default function LandingV2() {
       </section>
 
       {/* numbered rail */}
-      <section className="border-y border-slate-800/70 bg-[#0B0F14]">
+      <section className="border-y border-hairline/70 bg-base-2">
         <div className="mx-auto max-w-[1240px] px-6 py-20">
           {[
             ["01", "Drop the set", "Drag in the PDF. 100+ pages and separate spec sheets are normal, not an edge case."],
@@ -102,10 +106,10 @@ export default function LandingV2() {
             ["03", "You price it", "Waste factor, adhesive and labour hours arrive filled in per floor type. Tap any cell to override."],
             ["04", "Client pays it", "Quote PDF by email, invoice with a Stripe card checkout, expenses tracked against the bid."],
           ].map(([n, t, d]) => (
-            <div key={n} className="group grid gap-4 border-b border-slate-800/70 py-8 last:border-0 md:grid-cols-[90px_0.9fr_1.1fr]">
-              <div className="font-mono text-4xl font-semibold text-slate-700 transition-colors duration-200 group-hover:text-[#E2F952]">{n}</div>
-              <h3 className="font-heading text-2xl font-semibold text-slate-100">{t}</h3>
-              <p className="text-[16px] leading-relaxed text-slate-400">{d}</p>
+            <div key={n} className="group grid gap-4 border-b border-hairline/70 py-8 last:border-0 md:grid-cols-[90px_0.9fr_1.1fr]">
+              <div className="font-mono text-4xl font-semibold text-hairline transition-colors duration-200 group-hover:text-brand">{n}</div>
+              <h3 className="font-heading text-2xl font-semibold text-ink">{t}</h3>
+              <p className="text-[16px] leading-relaxed text-ink-3">{d}</p>
             </div>
           ))}
         </div>
@@ -115,20 +119,20 @@ export default function LandingV2() {
       <section className="mx-auto max-w-[1240px] px-6 py-20">
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
-            <p className="font-mono text-xs uppercase tracking-[0.24em] text-[#E2F952]">Pricing matrix</p>
-            <h2 className="mt-3 font-heading text-5xl font-bold tracking-tight text-slate-100">
+            <p className="font-mono text-xs uppercase tracking-[0.24em] text-brand">Pricing matrix</p>
+            <h2 className="mt-3 font-heading text-5xl font-bold tracking-tight text-ink">
               Two pages per dollar
             </h2>
-            <p className="mt-4 max-w-xl text-[16px] leading-relaxed text-slate-400">
+            <p className="mt-4 max-w-xl text-[16px] leading-relaxed text-ink-3">
               A page read by Claude Opus costs us {costs.data ? `$${costs.data.page_cost.toFixed(3)}` : "$0.115"}.
               Allowances are sized around that, so the price holds whether you bid one job or two hundred.
             </p>
           </div>
-          <div className="inline-flex border border-slate-800 bg-[#0B0F14] p-1" data-testid="v2-pricing-toggle">
+          <div className="inline-flex border border-hairline bg-base-2 p-1" data-testid="v2-pricing-toggle">
             {([["annual", "Annual −20%"], ["monthly", "Monthly"]] as const).map(([k, label]) => (
               <button key={k} type="button" data-testid={`v2-toggle-${k}`} onClick={() => setAnnual(k === "annual")}
                       className={cn("px-4 py-2 font-mono text-[11px] uppercase tracking-[0.18em] transition-colors duration-150",
-                        (k === "annual") === annual ? "bg-[#E2F952] text-[#07090C]" : "text-slate-400 hover:text-slate-200")}>
+                        (k === "annual") === annual ? "bg-brand text-base" : "text-ink-3 hover:text-ink-2")}>
                 {label}
               </button>
             ))}
@@ -139,15 +143,15 @@ export default function LandingV2() {
           <table className="w-full min-w-[900px] border-collapse text-left" data-testid="v2-pricing-matrix">
             <thead>
               <tr>
-                <th className="w-56 border-b border-slate-800 py-5 font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">Plan</th>
+                <th className="w-56 border-b border-hairline py-5 font-mono text-[11px] uppercase tracking-[0.18em] text-ink-3">Plan</th>
                 {rows.map((p) => (
                   <th key={p.id} className={cn("border-b py-5 pl-5 align-top",
-                    p.highlight ? "border-[#E2F952]" : "border-slate-800")}>
-                    <div className="font-heading text-lg font-semibold text-slate-100">{p.name}</div>
-                    <div className="mt-1 font-mono text-3xl font-semibold text-[#E2F952]" data-testid={`v2-price-${p.id}`}>
+                    p.highlight ? "border-brand" : "border-hairline")}>
+                    <div className="font-heading text-lg font-semibold text-ink">{p.name}</div>
+                    <div className="mt-1 font-mono text-3xl font-semibold text-brand" data-testid={`v2-price-${p.id}`}>
                       {p.kind === "contact" ? "Custom" : `$${p.kind === "subscription" ? (annual ? p.price : p.monthly_price) : p.price}`}
                     </div>
-                    <div className="mt-1 font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">{p.cadence}</div>
+                    <div className="mt-1 font-mono text-[11px] uppercase tracking-[0.16em] text-ink-3">{p.cadence}</div>
                   </th>
                 ))}
               </tr>
@@ -155,14 +159,14 @@ export default function LandingV2() {
             <tbody>
               {MATRIX_ROWS.map((r) => (
                 <tr key={r.label}>
-                  <td className="border-b border-slate-800/60 py-4 text-[15px] text-slate-300">{r.label}</td>
+                  <td className="border-b border-hairline/60 py-4 text-[15px] text-ink-2">{r.label}</td>
                   {rows.map((p) => {
                     const val = cellFor(p, String(r.key));
                     return (
-                      <td key={p.id} className="border-b border-slate-800/60 py-4 pl-5 font-mono text-[15px] text-slate-200"
+                      <td key={p.id} className="border-b border-hairline/60 py-4 pl-5 font-mono text-[15px] text-ink-2"
                           data-testid={`v2-cell-${p.id}-${String(r.key)}`}>
-                        {val === "yes" ? <Check className="h-4 w-4 text-[#E2F952]" />
-                          : val === "no" ? <Minus className="h-4 w-4 text-slate-600" /> : val}
+                        {val === "yes" ? <Check className="h-4 w-4 text-brand" />
+                          : val === "no" ? <Minus className="h-4 w-4 text-ink-4" /> : val}
                       </td>
                     );
                   })}
@@ -190,11 +194,11 @@ export default function LandingV2() {
       </section>
 
       {/* single-field demo capture */}
-      <section id="v2-demo" className="border-t border-slate-800/70 bg-[#0B0F14]">
+      <section id="v2-demo" className="border-t border-hairline/70 bg-base-2">
         <div className="mx-auto flex max-w-[1240px] flex-col gap-6 px-6 py-20 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h2 className="font-heading text-4xl font-bold tracking-tight text-slate-100">Send us your worst set</h2>
-            <p className="mt-4 max-w-lg text-[16px] leading-relaxed text-slate-400">
+            <h2 className="font-heading text-4xl font-bold tracking-tight text-ink">Send us your worst set</h2>
+            <p className="mt-4 max-w-lg text-[16px] leading-relaxed text-ink-3">
               We will read it live on a 30-minute call and hand you the priced takeoff — including
               Enterprise pricing if you need pooled volume and SSO.
             </p>
@@ -210,10 +214,10 @@ export default function LandingV2() {
         </div>
       </section>
 
-      <footer className="mx-auto flex max-w-[1240px] flex-wrap items-center justify-between gap-4 px-6 py-10 font-mono text-[11px] uppercase tracking-[0.2em] text-slate-600">
+      <footer className="mx-auto flex max-w-[1240px] flex-wrap items-center justify-between gap-4 px-6 py-10 font-mono text-[11px] uppercase tracking-[0.2em] text-ink-4">
         <span>© {new Date().getFullYear()} Gridline</span>
         <span>Encrypted in transit · never used for model training</span>
-        <Link to="/" className="hover:text-[#E2F952]">design v1 →</Link>
+        <Link to="/" className="hover:text-brand">design v1 →</Link>
       </footer>
     </div>
   );

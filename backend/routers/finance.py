@@ -523,12 +523,15 @@ async def billing_usage(user: dict = Depends(require("settings:read"))):
     pages = sum(int(j.get("pages_read") or j.get("pages") or 0) for j in jobs)
     seats = await db.users.count_documents({"$or": [{"id": acct}, {"account_id": acct}]})
     included = plan["pages_included"]
-    over = max(0, pages - included) if included >= 0 else 0
+    remaining = max(0, included - pages) if included >= 0 else -1
     return Usage(
         plan_id=plan["id"], plan_name=plan["name"], period=doc.get("plan_period", "annual"),
-        pages_included=included, pages_used=pages, jobs_included=plan["jobs_included"],
-        jobs_used=len(jobs), max_file_mb=plan["max_file_mb"], overage_pages=over,
-        overage_cost=round(over * plan["overage_per_page"], 2),
+        pages_included=included, pages_used=pages, pages_remaining=remaining,
+        limit_reached=included >= 0 and pages >= included,
+        near_limit=included > 0 and pages >= included * 0.8,
+        jobs_included=plan["jobs_included"],
+        jobs_used=len(jobs), max_file_mb=plan["max_file_mb"], overage_pages=0,
+        overage_cost=0.0,
         capabilities=plan["capabilities"], seat_count=plan["seat_count"], seats_used=seats,
     )
 

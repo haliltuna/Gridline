@@ -44,10 +44,10 @@ export default function SettingsPage() {
     <Shell title="Settings" subtitle="Tax is auto-detected from your country and state or province, and stays editable.">
       <div className="grid gap-6 lg:grid-cols-2">
         <Panel>
-          <h2 className="font-heading text-lg font-semibold text-slate-100">Tax</h2>
+          <h2 className="font-heading text-lg font-semibold text-ink">Tax</h2>
           <div className="mt-5 space-y-4">
             <div className="space-y-2">
-              <Label className="text-slate-300">Country</Label>
+              <Label className="text-ink-2">Country</Label>
               <Select
                 value={form?.country ?? "United States"}
                 onValueChange={(v: string) => { set({ country: v, region: "" }); detect.mutate({ country: v, region: "" }); }}
@@ -61,7 +61,7 @@ export default function SettingsPage() {
 
             {availableRegions.length > 0 && (
               <div className="space-y-2">
-                <Label className="text-slate-300">State / Province</Label>
+                <Label className="text-ink-2">State / Province</Label>
                 <Select
                   value={form?.region || availableRegions[0]}
                   onValueChange={(v: string) => { set({ region: v }); detect.mutate({ country: form?.country ?? "United States", region: v }); }}
@@ -76,11 +76,11 @@ export default function SettingsPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="taxlabel" className="text-slate-300">Tax label</Label>
+                <Label htmlFor="taxlabel" className="text-ink-2">Tax label</Label>
                 <Input id="taxlabel" data-testid="settings-tax-label-input" value={form?.tax_label ?? ""} onChange={(e) => set({ tax_label: e.target.value })} className="h-12 text-base" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="taxrate" className="text-slate-300">Tax rate %</Label>
+                <Label htmlFor="taxrate" className="text-ink-2">Tax rate %</Label>
                 <Input id="taxrate" type="number" step="0.005" data-testid="settings-tax-rate-input" value={form?.tax_rate ?? 0} onChange={(e) => set({ tax_rate: parseFloat(e.target.value) || 0 })} className="h-12 font-mono text-base" />
               </div>
             </div>
@@ -96,27 +96,27 @@ export default function SettingsPage() {
         </Panel>
 
         <Panel>
-          <h2 className="font-heading text-lg font-semibold text-slate-100">Company & labor</h2>
+          <h2 className="font-heading text-lg font-semibold text-ink">Company & labor</h2>
           <div className="mt-5 space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="cname" className="text-slate-300">Company name</Label>
+              <Label htmlFor="cname" className="text-ink-2">Company name</Label>
               <Input id="cname" data-testid="settings-company-input" value={form?.company_name ?? ""} onChange={(e) => set({ company_name: e.target.value })} className="h-12 text-base" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="cemail" className="text-slate-300">Billing email</Label>
+              <Label htmlFor="cemail" className="text-ink-2">Billing email</Label>
               <Input id="cemail" type="email" data-testid="settings-company-email-input" value={form?.company_email ?? ""} onChange={(e) => set({ company_email: e.target.value })} className="h-12 text-base" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="labor" className="text-slate-300">Labor rate / hr</Label>
+                <Label htmlFor="labor" className="text-ink-2">Labor rate / hr</Label>
                 <Input id="labor" type="number" step="0.5" data-testid="settings-labor-rate-input" value={form?.labor_rate ?? 0} onChange={(e) => set({ labor_rate: parseFloat(e.target.value) || 0 })} className="h-12 font-mono text-base" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="cur" className="text-slate-300">Currency</Label>
+                <Label htmlFor="cur" className="text-ink-2">Currency</Label>
                 <Input id="cur" data-testid="settings-currency-input" value={form?.currency ?? "USD"} onChange={(e) => set({ currency: e.target.value })} className="h-12 text-base" />
               </div>
             </div>
-            <p className="text-sm text-slate-500">New takeoff lines use this labor rate. Existing lines keep the rate they were priced at.</p>
+            <p className="text-sm text-ink-3">New takeoff lines use this labor rate. Existing lines keep the rate they were priced at.</p>
           </div>
         </Panel>
       </div>

@@ -10,13 +10,15 @@ vision at 200 DPI:
     TRUE COST PER PAGE                                                     ≈ $0.115
 
 Every paid tier is sized so that a customer who burns 100% of the included pages still
-leaves us a ~75% gross margin: page allowance ≈ price / (4 x $0.115) ≈ 2 pages per $1.
-Overage is $0.50/page, which holds the same margin on the marginal page.
+leaves us a ~75% gross margin: allowances are deliberately tight (25 / 60 / 100 pages) — a fully-used tier costs us
+under 5% of its price.
+There is NO overage billing: when the allowance is gone the upload is refused with an
+upgrade prompt, so a customer can never run pages we have not been paid for.
 """
 
 PAGE_COST = 0.115
 TARGET_MARGIN = 0.75
-OVERAGE_PER_PAGE = 0.50
+OVERAGE_PER_PAGE = 0.0   # hard stop: we never bill an overage and we never eat the cost
 
 COST_BREAKDOWN = [
     {"item": "Claude Opus vision — page image + prompt", "detail": "≈3,000 input tokens @ $15/M", "cost": 0.045},
@@ -41,11 +43,11 @@ PLANS: list[dict] = [
         "id": "trial", "name": "14-day Trial", "price": 0.0, "monthly_price": 0.0,
         "cadence": "free for 14 days", "kind": "trial", "seats": "1 seat", "badge": "",
         "blurb": "Read one real set end to end before you pay a cent.",
-        "pages_included": 60, "jobs_included": 2, "max_file_mb": 80, "seat_count": 1,
+        "pages_included": 10, "jobs_included": 1, "max_file_mb": 60, "seat_count": 1,
         "overage_per_page": 0.0, "lookup_key": "", "lookup_key_monthly": "",
         "capabilities": [CAP_TAKEOFF, CAP_PDF, CAP_QUOTE],
         "features": [
-            "60 blueprint pages, 2 jobs", "Full 12-type flooring logic",
+            "10 blueprint pages, 1 job", "Full 12-type flooring logic",
             "Takeoff + quote PDF export", "No card required", "Invoicing needs a paid plan",
         ],
         "highlight": False,
@@ -55,63 +57,63 @@ PLANS: list[dict] = [
         "cadence": "per job, one-off", "kind": "one_time", "seats": "1 seat",
         "badge": "No subscription",
         "blurb": "One set, read properly. For the contractor bidding the occasional job.",
-        "pages_included": 90, "jobs_included": 1, "max_file_mb": 80, "seat_count": 1,
-        "overage_per_page": OVERAGE_PER_PAGE, "lookup_key": "gridline_single", "lookup_key_monthly": "",
+        "pages_included": 25, "jobs_included": 1, "max_file_mb": 80, "seat_count": 1,
+        "overage_per_page": 0.0, "lookup_key": "gridline_single", "lookup_key_monthly": "",
         "capabilities": [CAP_TAKEOFF, CAP_PDF],
         "features": [
-            "1 job, up to 90 pages", "Every room measured, priced and flagged",
+            "1 job, up to 25 blueprint pages", "Every room measured, priced and flagged",
             "Editable takeoff + branded takeoff PDF", "Spec-sheet reading included",
             "Quotes, invoicing and payments are NOT included",
         ],
         "highlight": False,
     },
     {
-        "id": "crew", "name": "Crew", "price": 199.0, "monthly_price": 249.0,
+        "id": "crew", "name": "Crew", "price": 149.0, "monthly_price": 186.0,
         "cadence": "per month", "kind": "subscription", "seats": "2 seats",
         "badge": "Most popular",
         "blurb": "The working estimator's plan: bid, quote, invoice and get paid.",
-        "pages_included": 400, "jobs_included": 10, "max_file_mb": 120, "seat_count": 2,
-        "overage_per_page": OVERAGE_PER_PAGE, "lookup_key": "gridline_crew_annual",
+        "pages_included": 60, "jobs_included": 3, "max_file_mb": 120, "seat_count": 2,
+        "overage_per_page": 0.0, "lookup_key": "gridline_crew_annual",
         "lookup_key_monthly": "gridline_crew_monthly",
         "capabilities": [CAP_TAKEOFF, CAP_PDF, CAP_QUOTE, CAP_INVOICE, CAP_CHANGE_ORDER],
         "features": [
-            "400 pages / month · 10 jobs / month", "Quotes emailed with the PDF attached",
+            "60 pages / month · 3 jobs / month", "Quotes emailed with the PDF attached",
             "Invoices with a real card checkout", "Change orders with full revision history",
-            "2 seats (owner + estimator)", "Overage $0.50 / page — never a hard stop",
+            "2 seats (owner + estimator)", "Upgrade any time — pages never auto-bill",
         ],
         "highlight": True,
     },
     {
-        "id": "pro", "name": "Contractor Pro", "price": 499.0, "monthly_price": 624.0,
+        "id": "pro", "name": "Contractor Pro", "price": 249.0, "monthly_price": 311.0,
         "cadence": "per month", "kind": "subscription", "seats": "5 seats",
         "badge": "Best for multi-family",
         "blurb": "Unlimited jobs, job costing and the unit-template library.",
-        "pages_included": 1000, "jobs_included": -1, "max_file_mb": 200, "seat_count": 5,
-        "overage_per_page": OVERAGE_PER_PAGE, "lookup_key": "gridline_pro_annual",
+        "pages_included": 100, "jobs_included": -1, "max_file_mb": 200, "seat_count": 5,
+        "overage_per_page": 0.0, "lookup_key": "gridline_pro_annual",
         "lookup_key_monthly": "gridline_pro_monthly",
         "capabilities": [CAP_TAKEOFF, CAP_PDF, CAP_QUOTE, CAP_INVOICE, CAP_CHANGE_ORDER,
                          CAP_COSTING, CAP_EXPORT, CAP_TEMPLATES],
         "features": [
-            "1,000 pages / month · unlimited jobs", "Everything in Crew",
+            "100 pages / month · unlimited jobs", "Everything in Crew",
             "Bid vs actual job costing + expense log", "Unit-template library across buildings",
             "CSV / QuickBooks export", "5 seats with owner / estimator / viewer roles",
         ],
         "highlight": False,
     },
     {
-        "id": "agency", "name": "Agency", "price": 999.0, "monthly_price": 1249.0,
+        "id": "agency", "name": "Agency", "price": 499.0, "monthly_price": 624.0,
         "cadence": "per month", "kind": "subscription", "seats": "15 seats",
         "badge": "Multi-crew",
         "blurb": "Several estimators bidding at once across regions.",
-        "pages_included": 2000, "jobs_included": -1, "max_file_mb": 300, "seat_count": 15,
-        "overage_per_page": 0.40, "lookup_key": "gridline_agency_annual",
+        "pages_included": 250, "jobs_included": -1, "max_file_mb": 300, "seat_count": 15,
+        "overage_per_page": 0.0, "lookup_key": "gridline_agency_annual",
         "lookup_key_monthly": "gridline_agency_monthly",
         "capabilities": [CAP_TAKEOFF, CAP_PDF, CAP_QUOTE, CAP_INVOICE, CAP_CHANGE_ORDER,
                          CAP_COSTING, CAP_EXPORT, CAP_TEMPLATES, CAP_API],
         "features": [
-            "2,000 pages / month, pooled across seats", "Everything in Contractor Pro",
+            "250 pages / month, pooled across seats", "Everything in Contractor Pro",
             "15 seats · priority blueprint queue", "Shared template + cost-book library",
-            "API access", "Overage $0.40 / page",
+            "API access", "Pooled pages across the whole team",
         ],
         "highlight": False,
     },
@@ -142,7 +144,7 @@ COMPETITORS = [
     {"name": "STACK", "price": "≈$2,500 / yr per seat", "note": "Cloud takeoff, still manual tracing. Flooring waste/adhesive logic is DIY."},
     {"name": "Togal.AI", "price": "≈$6,000 / yr", "note": "AI area detection for GCs — not flooring-specific, no invoicing."},
     {"name": "Bluebeam Revu", "price": "$260 / yr per seat", "note": "PDF markup tool. You measure every room yourself."},
-    {"name": "Gridline Crew", "price": "$199 / mo annual", "note": "AI reads the set, prices it with flooring logic, quotes, invoices and collects."},
+    {"name": "Gridline Crew", "price": "$149 / mo annual", "note": "AI reads the set, prices it with flooring logic, quotes, invoices and collects."},
 ]
 
 

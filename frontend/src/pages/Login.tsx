@@ -52,15 +52,15 @@ export default function Login() {
   });
 
   return (
-    <div className="relative grid min-h-screen place-items-center overflow-hidden bg-[#090D12] px-5 py-12">
+    <div className="relative grid min-h-screen place-items-center overflow-hidden bg-base px-5 py-12">
       <div className="gl-grid absolute inset-0 opacity-30" />
       <div className="relative w-full max-w-md gl-rise">
         <Link to="/" data-testid="login-home-link" className="mb-8 inline-block"><Logo /></Link>
-        <div className="border border-slate-800/80 bg-[#0F1722] p-8">
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-[#E2F952]">
+        <div className="border border-hairline/80 bg-surface p-8">
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-brand">
             {mode === "signup" ? "Create account" : "Sign in"}
           </p>
-          <h1 className="mt-3 font-heading text-3xl font-bold tracking-tight text-slate-100">
+          <h1 className="mt-3 font-heading text-3xl font-bold tracking-tight text-ink">
             {mode === "signup" ? "Start your 14-day trial" : "Back to the estimating desk"}
           </h1>
 
@@ -77,21 +77,21 @@ export default function Login() {
             {mode === "signup" && (
               <>
                 <div className="space-y-2">
-                  <Label htmlFor="name" className="text-slate-300">Your name</Label>
+                  <Label htmlFor="name" className="text-ink-2">Your name</Label>
                   <Input id="name" data-testid="signup-name-input" value={name} onChange={(e) => setName(e.target.value)} required className="h-12 text-base" />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="company" className="text-slate-300">Company</Label>
+                  <Label htmlFor="company" className="text-ink-2">Company</Label>
                   <Input id="company" data-testid="signup-company-input" value={company} onChange={(e) => setCompany(e.target.value)} className="h-12 text-base" />
                 </div>
               </>
             )}
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-slate-300">Email</Label>
+              <Label htmlFor="email" className="text-ink-2">Email</Label>
               <Input id="email" type="email" data-testid="login-email-input" value={email} onChange={(e) => setEmail(e.target.value)} required className="h-12 text-base" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-slate-300">Password</Label>
+              <Label htmlFor="password" className="text-ink-2">Password</Label>
               <Input id="password" type="password" data-testid="login-password-input" value={password} onChange={(e) => setPassword(e.target.value)} required className="h-12 text-base" />
             </div>
             <Button type="submit" size="lg" data-testid="login-submit-button" disabled={mut.isPending} className="w-full font-semibold">
@@ -102,13 +102,13 @@ export default function Login() {
           <button
             type="button"
             data-testid="login-mode-toggle"
-            className="mt-6 w-full text-center text-sm text-slate-400 transition-colors hover:text-[#E2F952]"
+            className="mt-6 w-full text-center text-sm text-ink-3 transition-colors hover:text-brand"
             onClick={() => setMode(mode === "signup" ? "login" : "signup")}
           >
             {mode === "signup" ? "Already have an account? Sign in" : "New here? Create an account"}
           </button>
         </div>
-        <p className="mt-5 text-center font-mono text-xs text-slate-500" data-testid="login-demo-hint">
+        <p className="mt-5 text-center font-mono text-xs text-ink-3" data-testid="login-demo-hint">
           Demo login · demo@gridline.app / gridline123
         </p>
       </div>

@@ -40,25 +40,40 @@ shadcn (base-nova) · TanStack Query · httpOnly cookie sessions.
    via GET /api/tax/detect; every field stays editable.
 
 ## Pricing tiers (backend/lib/pricing.py — single source of truth)
-Unit cost that drives everything: one blueprint page read by Claude Opus at 200 DPI costs
-**$0.115** ($0.045 input image+prompt, $0.060 output JSON, $0.010 render/storage/db). Every
-paid tier is sized so a fully-used allowance still leaves ~75% gross margin (~2 pages per $1);
-overage is $0.50/page ($0.40 on Agency) rather than a hard stop.
+One blueprint page read by Claude Opus at 200 DPI costs **$0.115** ($0.045 in, $0.060 out,
+$0.010 render/storage). Allowances are deliberately tight and there is **NO overage billing**:
+when the pages are gone the upload is refused (402) with an upgrade prompt, so we never read
+pages we have not been paid for and the customer never gets a surprise charge.
 
-| Tier | Price | Pages | Jobs | Seats | Max PDF | Capabilities |
-|---|---|---|---|---|---|---|
-| Trial (14 days) | free | 60 | 2 | 1 | 80 MB | takeoff, pdf, quote |
-| Single Takeoff | $49 one-off | 90 total | 1 | 1 | 80 MB | takeoff, pdf ONLY |
-| Crew | $199/mo annual ($249 monthly) | 400/mo | 10/mo | 2 | 120 MB | + quote, invoice, change orders |
-| Contractor Pro | $499/mo annual ($624) | 1000/mo | unlimited | 5 | 200 MB | + costing, export, templates |
-| Agency | $999/mo annual ($1249) | 2000/mo | unlimited | 15 | 300 MB | + API |
-| Enterprise | custom | pooled | unlimited | unlimited | 500 MB | everything |
+| Tier | Price | Pages | Jobs | Seats | Max PDF | COGS at full use | Capabilities |
+|---|---|---|---|---|---|---|---|
+| Trial (14 days) | free | 10 | 1 | 1 | 60 MB | $1.15 | takeoff, pdf, quote |
+| Single Takeoff | $49 one-off | 25 total | 1 | 1 | 80 MB | $2.88 (94% margin) | takeoff, pdf ONLY |
+| Crew | $149/mo annual ($186 monthly) | 60/mo | 3/mo | 2 | 120 MB | $6.90 (95%) | + quote, invoice, change orders |
+| Contractor Pro | $249/mo annual ($311) | 100/mo | unlimited | 5 | 200 MB | $11.50 (95%) | + costing, export, templates |
+| Agency | $499/mo annual ($624) | 250/mo | unlimited | 15 | 300 MB | $28.75 (94%) | + API |
+| Enterprise | custom | pooled | unlimited | unlimited | 500 MB | negotiated | everything |
 
-Gating: `lib/pricing.has_cap` + `_needs()` in routers/finance.py return **402** with an upgrade
-message when the plan lacks a capability (quote, invoice, change order, costing, export).
-Upload caps (file MB, monthly pages, monthly jobs) are enforced in routers/jobs.py.
-GET /api/billing/plans · /api/billing/usage · /api/billing/cost-model (cost breakdown +
-competitor comparison, shown on the landing page and Billing page).
+Enforcement: routers/jobs.py counts the incoming PDF's pages with PyMuPDF BEFORE any AI call
+and refuses if `incoming > remaining`; capability gating (`_needs` in routers/finance.py)
+returns 402 with the upgrade message for quote/invoice/change order/costing/export.
+Frontend surfaces this through `components/UsageMeter.tsx` (Upload page always, Dashboard when
+near/at the limit) and the 402 detail is shown verbatim in the upload error toast.
+GET /api/billing/usage now returns pages_remaining, limit_reached, near_limit.
+
+## Themes (app-wide, user-selectable)
+`src/lib/theme.tsx` (ThemeProvider + useTheme, persisted in localStorage under
+`gridline-theme`) sets `data-theme` on <html>. Three complete skins defined in
+`src/index.css` as palette tokens — **readout** (near-black + neon yellow, Space Grotesk),
+**blueprint** (deep indigo + cyan, Archivo/Inter Tight), **daylight** (paper white + ink
+blue). Every page paints from the tokens (`bg-base/base-2/surface/surface-2`,
+`border-hairline`, `text-ink|ink-2|ink-3|ink-4`, `bg-brand/text-brand/brand-soft/on-brand`)
+— never raw hex — so adding a theme means adding one `[data-theme=...]` block.
+Picker: `components/ThemeSwitcher.tsx`, in the app header and on both landing pages.
+
+## Margin alerts
+`components/MarginAlerts.tsx` on the dashboard flags any job under 20% margin (actual
+expenses vs invoiced/quoted) straight from GET /api/costing/overview.
 
 ## Payments — real Stripe Checkout (TEST mode)
 routers/payments.py. Keys in backend/.env (STRIPE_SECRET_KEY/WEBHOOK_SECRET), catalog created

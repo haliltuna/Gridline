@@ -35,38 +35,38 @@ export default function PaymentResult({ cancelled = false }: { cancelled?: boole
   const pending = !cancelled && !paid && tries < 10;
 
   return (
-    <div className="relative grid min-h-screen place-items-center overflow-hidden bg-[#090D12] px-5 py-12">
+    <div className="relative grid min-h-screen place-items-center overflow-hidden bg-base px-5 py-12">
       <div className="gl-grid absolute inset-0 opacity-25" />
-      <div className="relative w-full max-w-lg gl-rise border border-slate-800 bg-[#0F1722] p-8">
+      <div className="relative w-full max-w-lg gl-rise border border-hairline bg-surface p-8">
         <Logo />
         {cancelled && (
           <div className="mt-6" data-testid="payment-cancelled">
-            <XCircle className="h-10 w-10 text-slate-500" />
-            <h1 className="mt-4 font-heading text-3xl font-bold text-slate-100">Checkout cancelled</h1>
-            <p className="mt-2 text-[15px] text-slate-400">Nothing was charged. You can pick a plan again any time.</p>
+            <XCircle className="h-10 w-10 text-ink-3" />
+            <h1 className="mt-4 font-heading text-3xl font-bold text-ink">Checkout cancelled</h1>
+            <p className="mt-2 text-[15px] text-ink-3">Nothing was charged. You can pick a plan again any time.</p>
           </div>
         )}
         {!cancelled && paid && (
           <div className="mt-6" data-testid="payment-success">
             <CheckCircle2 className="h-10 w-10 text-emerald-400" />
-            <h1 className="mt-4 font-heading text-3xl font-bold text-slate-100">Payment confirmed</h1>
-            <p className="mt-2 text-[15px] text-slate-400">
+            <h1 className="mt-4 font-heading text-3xl font-bold text-ink">Payment confirmed</h1>
+            <p className="mt-2 text-[15px] text-ink-3">
               {money(status.data?.amount ?? 0)} received. Your plan is active — the new page allowance applies immediately.
             </p>
           </div>
         )}
         {!cancelled && !paid && (
           <div className="mt-6" data-testid="payment-pending">
-            {pending ? <Loader2 className="h-10 w-10 animate-spin text-[#E2F952]" /> : <XCircle className="h-10 w-10 text-amber-400" />}
-            <h1 className="mt-4 font-heading text-3xl font-bold text-slate-100">
+            {pending ? <Loader2 className="h-10 w-10 animate-spin text-brand" /> : <XCircle className="h-10 w-10 text-amber-400" />}
+            <h1 className="mt-4 font-heading text-3xl font-bold text-ink">
               {pending ? "Confirming with Stripe…" : "Still not confirmed"}
             </h1>
-            <p className="mt-2 text-[15px] text-slate-400">
+            <p className="mt-2 text-[15px] text-ink-3">
               {pending
                 ? "This takes a couple of seconds. Do not close the page."
                 : "Stripe has not reported this payment yet. Open Billing to check, or contact support with the session id."}
             </p>
-            {sessionId && <p className="mt-3 break-all font-mono text-xs text-slate-600">{sessionId}</p>}
+            {sessionId && <p className="mt-3 break-all font-mono text-xs text-ink-4">{sessionId}</p>}
           </div>
         )}
         <div className="mt-8 flex gap-3">
