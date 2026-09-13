@@ -434,8 +434,13 @@ def line_cost(line: dict[str, Any]) -> float:
     return round(material + labor, 2)
 
 
-def build_accessory_lines(parsed: dict[str, Any], job_id: str, labor_rate: float) -> list[dict[str, Any]]:
-    """Turn the AI's door and step counts into priced transition / nosing lines."""
+def build_accessory_lines(parsed: dict[str, Any], job_id: str, labor_rate: float,
+                          prices: dict[str, float] | None = None) -> list[dict[str, Any]]:
+    """Turn the AI's door, step and wall-base counts into priced accessory lines.
+
+    `prices` is the account's own accessory catalogue (settings) keyed by kind; anything missing
+    falls back to the built-in defaults in lib/flooring.ACCESSORIES.
+    """
     groups = parsed.get("accessories") or []
     if not groups:
         totals = {"doors": int(parsed.get("doors") or 0), "steps": int(parsed.get("steps") or 0),
@@ -454,13 +459,14 @@ def build_accessory_lines(parsed: dict[str, Any], job_id: str, labor_rate: float
             if qty <= 0:
                 continue
             d = accessory_defaults(kind)
+            unit_price = float((prices or {}).get(kind) or d["unit_price"])
             out.append(build_line({
                 "building": g.get("building") or "Building A",
                 "unit": g.get("unit") or "Main",
                 "room": room,
                 "scope": "accessory",
                 "qty": round(qty, 2),
-                "unit_price": float(d["unit_price"]),
+                "unit_price": unit_price,
                 "labor_hours": round(qty * float(d["labor_hr_each"]), 2),
                 "source": f"counted from the drawings ({qty:,.0f} {d['unit']}"
                           + ("" if d["unit"] == "lf" else "s") + ")",

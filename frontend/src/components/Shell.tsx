@@ -128,9 +128,9 @@ export default function Shell({ children, title, subtitle, action }: {
   );
 }
 
-export function Panel({ children, className }: { children: ReactNode; className?: string }) {
+export function Panel({ children, className, testId }: { children: ReactNode; className?: string; testId?: string }) {
   return (
-    <div className={cn("border border-hairline/80 bg-surface p-5 transition-colors hover:border-hairline", className)}>
+    <div data-testid={testId} className={cn("border border-hairline/80 bg-surface p-5 transition-colors hover:border-hairline", className)}>
       {children}
     </div>
   );

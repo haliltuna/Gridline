@@ -172,7 +172,11 @@ async def upload_blueprint(job_id: str, file: UploadFile = File(...), user: dict
         for line in lines:
             line.update(apply_specs_to_line(line, job_specs))
     # Doors become transition strips, stair treads become nosings — counted, then priced.
-    lines += build_accessory_lines(result, job_id, labor_rate)
+    lines += build_accessory_lines(result, job_id, labor_rate, {
+        "transition": float(settings.get("acc_transition_price") or 0),
+        "nosing": float(settings.get("acc_nosing_price") or 0),
+        "cove_base": float(settings.get("acc_cove_base_price") or 0),
+    })
     if lines:
         await db.takeoff_lines.insert_many([dict(line) for line in lines])
 
@@ -219,7 +223,15 @@ async def list_lines(job_id: str, user: dict = Depends(require("takeoff:read")))
 async def add_line(job_id: str, body: LineCreate, user: dict = Depends(require("takeoff:write"))):
     await _job_or_404(job_id, account_id(user))
     settings = await db.settings.find_one({"user_id": account_id(user)}, {"_id": 0}) or {}
-    line = build_line(body.model_dump(), job_id, float(settings.get("labor_rate", 58.0)))
+    payload = body.model_dump()
+    if payload.get("scope") == "accessory" and not payload.get("unit_price"):
+        # Fall back to the account's accessory catalogue, picked from the room name.
+        room = (payload.get("room") or "").lower()
+        key = ("acc_nosing_price" if "nosing" in room or "step" in room
+               else "acc_cove_base_price" if "base" in room
+               else "acc_transition_price")
+        payload["unit_price"] = float(settings.get(key) or 0)
+    line = build_line(payload, job_id, float(settings.get("labor_rate", 58.0)))
     await db.takeoff_lines.insert_one(dict(line))
     return _with_cost(line)
 

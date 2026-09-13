@@ -30,8 +30,14 @@ export default function SettingsPage() {
   const save = useMutation({
     mutationFn: () => {
       if (!form) throw new Error("not loaded");
-      const { country, region, tax_label, tax_rate, currency, labor_rate, company_name, company_email } = form;
-      return apiPut<SettingsT>("/settings", { country, region, tax_label, tax_rate, currency, labor_rate, company_name, company_email });
+      const {
+        country, region, tax_label, tax_rate, currency, labor_rate, company_name, company_email,
+        acc_transition_price, acc_nosing_price, acc_cove_base_price,
+      } = form;
+      return apiPut<SettingsT>("/settings", {
+        country, region, tax_label, tax_rate, currency, labor_rate, company_name, company_email,
+        acc_transition_price, acc_nosing_price, acc_cove_base_price,
+      });
     },
     onSuccess: (d) => { qc.setQueryData(["settings"], d); toast.success("Settings saved"); },
     onError: () => toast.error("Could not save settings"),
@@ -118,6 +124,34 @@ export default function SettingsPage() {
             </div>
             <p className="text-sm text-ink-3">New takeoff lines use this labor rate. Existing lines keep the rate they were priced at.</p>
           </div>
+        </Panel>
+
+        <Panel testId="accessory-catalogue">
+          <h2 className="font-heading text-lg font-semibold text-ink">Accessory catalogue</h2>
+          <p className="mt-2 text-[15px] text-ink-2">
+            Your own unit prices for the trim work the AI counts off the drawings — door openings,
+            stair treads and wall base. Every new takeoff is priced from these.
+          </p>
+          <div className="mt-5 grid gap-4 sm:grid-cols-3">
+            {([
+              ["acc_transition_price", "Transition strip / door", "18.00", "settings-acc-transition-input"],
+              ["acc_nosing_price", "Stair nosing / step", "42.00", "settings-acc-nosing-input"],
+              ["acc_cove_base_price", "Cove base / linear ft", "3.40", "settings-acc-cove-input"],
+            ] as const).map(([key, label, ph, testId]) => (
+              <div key={key} className="space-y-2">
+                <Label htmlFor={key} className="text-ink-2">{label}</Label>
+                <Input
+                  id={key} type="number" step="0.05" placeholder={ph} data-testid={testId}
+                  value={form?.[key] ?? 0}
+                  onChange={(e) => set({ [key]: parseFloat(e.target.value) || 0 } as Partial<SettingsT>)}
+                  className="h-12 font-mono text-base"
+                />
+              </div>
+            ))}
+          </div>
+          <p className="mt-4 text-sm text-ink-3">
+            Existing lines keep the price they were quoted at — change one on the takeoff to reprice it.
+          </p>
         </Panel>
       </div>
 

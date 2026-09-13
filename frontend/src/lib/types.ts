@@ -31,6 +31,9 @@ export interface Settings {
   company_email: string;
   pdf_template: string;
   default_scope: string;
+  acc_transition_price: number;
+  acc_nosing_price: number;
+  acc_cove_base_price: number;
 }
 
 export interface TaxDetect {
@@ -154,6 +157,12 @@ export interface UnitTemplate {
   created_at: string;
 }
 
+export interface FieldChange {
+  field: string;
+  before: string;
+  after: string;
+}
+
 export interface DiffLine {
   key: string;
   room: string;
@@ -162,7 +171,9 @@ export interface DiffLine {
   change: string;
   old_cost: number;
   new_cost: number;
+  delta: number;
   fields: string[];
+  changes: FieldChange[];
 }
 
 export interface QuoteDiff {

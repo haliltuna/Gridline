@@ -654,27 +654,53 @@ export default function Takeoff() {
                             </div>
                           ))}
                         </div>
-                        <div className="max-h-[320px] space-y-1.5 overflow-y-auto" data-testid="diff-lines">
-                          {diff.data.lines.filter((l) => l.change !== "unchanged").map((l) => (
+                        <div className="max-h-[360px] space-y-1.5 overflow-y-auto" data-testid="diff-lines">
+                          {(() => {
+                            const moved = diff.data.lines.filter((l) => l.change !== "unchanged");
+                            const biggest = moved.reduce((m, l) => Math.max(m, Math.abs(l.delta)), 0);
+                            return moved.map((l) => (
                             <div key={l.key} data-testid={`diff-row-${l.change}`}
-                                 className="flex flex-wrap items-center justify-between gap-3 border border-hairline bg-surface-2 px-3 py-2">
-                              <div className="min-w-0">
-                                <div className="truncate text-[15px] text-ink">{l.room}</div>
-                                <div className="truncate font-mono text-[11px] text-ink-3">
-                                  {l.building} › {l.unit}{l.fields.length ? ` · ${l.fields.join(", ")}` : ""}
+                                 className={cn("border bg-surface-2 px-3 py-2",
+                                   Math.abs(l.delta) === biggest && biggest > 0
+                                     ? "border-brand/60 shadow-[0_0_0_1px_rgba(var(--t-glow),0.25)]"
+                                     : "border-hairline")}>
+                              <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="truncate text-[15px] text-ink">{l.room}</div>
+                                  <div className="truncate font-mono text-[11px] text-ink-3">{l.building} › {l.unit}</div>
+                                </div>
+                                <div className="flex items-center gap-3 font-mono text-sm">
+                                  {Math.abs(l.delta) === biggest && biggest > 0 && (
+                                    <span className="border border-brand/50 bg-brand-soft px-2 py-0.5 text-[10px] uppercase tracking-widest text-brand"
+                                          data-testid="diff-biggest-mover">biggest mover</span>
+                                  )}
+                                  <span className={cn("uppercase tracking-widest text-[11px]",
+                                    l.change === "added" ? "text-emerald-400" : l.change === "removed" ? "text-red-400" : "text-amber-300")}>
+                                    {l.change}
+                                  </span>
+                                  <span className="text-ink-3">{money(l.old_cost)}</span>
+                                  <span className="text-ink-4">→</span>
+                                  <span className="font-semibold text-ink">{money(l.new_cost)}</span>
+                                  <span className={cn("font-semibold", l.delta >= 0 ? "text-brand" : "text-red-400")}
+                                        data-testid={`diff-delta-${l.key}`}>
+                                    {l.delta >= 0 ? "+" : "−"}{money(Math.abs(l.delta))}
+                                  </span>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-3 font-mono text-sm">
-                                <span className={cn("uppercase tracking-widest text-[11px]",
-                                  l.change === "added" ? "text-emerald-400" : l.change === "removed" ? "text-red-400" : "text-amber-300")}>
-                                  {l.change}
-                                </span>
-                                <span className="text-ink-3">{money(l.old_cost)}</span>
-                                <span className="text-ink-4">→</span>
-                                <span className="font-semibold text-ink">{money(l.new_cost)}</span>
-                              </div>
+                              {l.changes.length > 0 && (
+                                <div className="mt-2 flex flex-wrap gap-1.5" data-testid={`diff-fields-${l.key}`}>
+                                  {l.changes.map((c) => (
+                                    <span key={c.field}
+                                          className="border border-hairline bg-surface px-2 py-0.5 font-mono text-[11px] text-ink-2">
+                                      {c.field}: <span className="text-ink-4 line-through">{c.before}</span>{" "}
+                                      <span className="text-brand">{c.after}</span>
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
                             </div>
-                          ))}
+                            ));
+                          })()}
                           {diff.data.lines.every((l) => l.change === "unchanged") && (
                             <p className="text-ink-3" data-testid="diff-no-changes">No line changed between these revisions.</p>
                           )}

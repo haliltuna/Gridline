@@ -12,6 +12,7 @@ from lib.db import db
 from lib.flooring import FLOOR_TYPE_NAMES, MISC_PRESETS, SCOPES
 from lib.pdf import DEFAULT_TEMPLATE, TEMPLATES, quote_pdf, takeoff_pdf
 from models.schemas import (
+    FieldChange,
     SpecPricingIn,
     DiffLine, Job, QuoteDiff, SpecReadResult, TakeoffLine, UnitTemplate,
     UnitTemplateApplyIn, UnitTemplateLine, UnitTemplateSaveIn,
@@ -164,7 +165,25 @@ def _diff_key(line: dict) -> str:
     return f"{line.get('building', '')}|{line.get('unit', '')}|{line.get('room', '')}".lower()
 
 
-WATCHED = ["scope", "floor_type", "product", "sqft", "waste_pct", "labor_hours", "material_cost_per_sqft", "flat_cost"]
+WATCHED = ["scope", "floor_type", "product", "sqft", "waste_pct", "labor_hours",
+           "material_cost_per_sqft", "labor_rate", "flat_cost", "qty", "unit_price"]
+
+FIELD_LABELS = {
+    "scope": "scope", "floor_type": "floor type", "product": "product", "sqft": "sq ft",
+    "waste_pct": "waste %", "labor_hours": "labor hr", "material_cost_per_sqft": "$/sq ft",
+    "labor_rate": "labor rate", "flat_cost": "flat price", "qty": "qty", "unit_price": "$ each",
+}
+
+
+def _show(field: str, value: object) -> str:
+    if value in (None, ""):
+        return "—"
+    if field in ("product", "scope", "floor_type"):
+        return str(value)
+    try:
+        return f"{float(value):,.2f}".rstrip("0").rstrip(".")
+    except (TypeError, ValueError):
+        return str(value)
 
 
 @router.get("/quotes/{quote_id}/diff", response_model=QuoteDiff)
@@ -184,22 +203,28 @@ async def quote_diff(quote_id: str, against: str = Query(..., description="quote
         if not prev:
             rows.append(DiffLine(key=key, room=line.get("room", ""), building=line.get("building", ""),
                                  unit=line.get("unit", ""), change="added",
-                                 new_cost=float(line.get("cost", 0))))
+                                 new_cost=float(line.get("cost", 0)),
+                                 delta=round(float(line.get("cost", 0)), 2)))
             continue
-        changed = [f for f in WATCHED if str(prev.get(f, "")) != str(line.get(f, ""))]
+        changed = [f for f in WATCHED if _show(f, prev.get(f)) != _show(f, line.get(f))]
+        old_cost, new_cost = float(prev.get("cost", 0)), float(line.get("cost", 0))
         rows.append(DiffLine(
             key=key, room=line.get("room", ""), building=line.get("building", ""), unit=line.get("unit", ""),
             change="changed" if changed else "unchanged",
-            old_cost=float(prev.get("cost", 0)), new_cost=float(line.get("cost", 0)), fields=changed,
+            old_cost=old_cost, new_cost=new_cost, delta=round(new_cost - old_cost, 2), fields=changed,
+            changes=[FieldChange(field=FIELD_LABELS.get(f, f), before=_show(f, prev.get(f)),
+                                 after=_show(f, line.get(f))) for f in changed],
         ))
     for key, prev in old_map.items():
         if key not in new_map:
             rows.append(DiffLine(key=key, room=prev.get("room", ""), building=prev.get("building", ""),
                                  unit=prev.get("unit", ""), change="removed",
-                                 old_cost=float(prev.get("cost", 0))))
+                                 old_cost=float(prev.get("cost", 0)),
+                                 delta=round(-float(prev.get("cost", 0)), 2)))
 
+    # Biggest mover first: within each change type the line that shifted the total most leads.
     order = {"added": 0, "changed": 1, "removed": 2, "unchanged": 3}
-    rows.sort(key=lambda r: (order[r.change], r.building, r.unit, r.room))
+    rows.sort(key=lambda r: (order[r.change], -abs(r.delta), r.building, r.unit, r.room))
     return QuoteDiff(
         from_number=old_q["number"], to_number=new_q["number"],
         from_revision=int(old_q.get("revision", 1)), to_revision=int(new_q.get("revision", 1)),

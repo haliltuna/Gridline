@@ -175,3 +175,14 @@ Test guidance: /app/auth_testing.md (seed a sessions row; OAuth itself is not sc
 - Plan-id migration: the removed `agency` tier is aliased to `pro` in
   `lib/pricing.LEGACY_PLAN_IDS` and existing `agency` users were moved to `pro`, which restored
   invoice/costing capabilities for the demo accounts.
+
+## Accessory catalogue & richer change-order diff (2026-09)
+- Settings (`Settings`/`SettingsIn`) carry `acc_transition_price`, `acc_nosing_price`,
+  `acc_cove_base_price` (defaults 18 / 42 / 3.40). `build_accessory_lines(..., prices=…)` uses
+  them for every AI-counted accessory line, and a manually added `accessory` line with no unit
+  price picks the right catalogue entry from its room name. UI: Accessory catalogue panel on
+  the Settings page (`accessory-catalogue`).
+- `GET /api/quotes/{id}/diff` now returns, per line, `delta` plus `changes[]`
+  (`FieldChange{field,before,after}`) across scope, floor type, product, sq ft, waste, labor hr,
+  $/sq ft, labor rate, flat price, qty and $ each. Rows sort biggest-mover-first; the Takeoff
+  diff dialog renders before→after chips, a per-line ± delta and a `diff-biggest-mover` badge.

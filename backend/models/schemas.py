@@ -110,6 +110,10 @@ class Settings(BaseModel):
     company_email: str = ""
     pdf_template: str = "contractor_clean"
     default_scope: str = "supply_install"
+    # Accessory catalogue — the account's own default prices for counted trim work.
+    acc_transition_price: float = 18.0
+    acc_nosing_price: float = 42.0
+    acc_cove_base_price: float = 3.4
 
 
 class SettingsIn(BaseModel):
@@ -123,6 +127,9 @@ class SettingsIn(BaseModel):
     company_email: str = ""
     pdf_template: str = "contractor_clean"
     default_scope: str = "supply_install"
+    acc_transition_price: float = 18.0
+    acc_nosing_price: float = 42.0
+    acc_cove_base_price: float = 3.4
 
 
 class TaxDetect(BaseModel):
@@ -296,6 +303,12 @@ class UnitTemplateApplyIn(BaseModel):
     replace_existing: bool = False
 
 
+class FieldChange(BaseModel):
+    field: str
+    before: str
+    after: str
+
+
 class DiffLine(BaseModel):
     key: str
     room: str
@@ -304,7 +317,9 @@ class DiffLine(BaseModel):
     change: str  # added | removed | changed | unchanged
     old_cost: float = 0.0
     new_cost: float = 0.0
+    delta: float = 0.0
     fields: list[str] = []
+    changes: list[FieldChange] = []
 
 
 class QuoteDiff(BaseModel):
