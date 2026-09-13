@@ -40,7 +40,16 @@ shadcn (base-nova) · TanStack Query · httpOnly cookie sessions.
    via GET /api/tax/detect; every field stays editable.
 
 ## Pricing tiers (GET /api/billing/plans)
-Single Job $39/takeoff · Five Pack $99 one-time (5 jobs) · Unlimited Pro $999/mo, 14-day trial.
+Single Job $39/takeoff · Five Pack $99 one-time · Unlimited Pro $249/mo annual ($311 monthly,
+2 seats, 14-day trial) · Agency $999/mo annual ($1249 monthly, 10 seats) · Enterprise (contact).
+Landing `/` shows an annual/monthly toggle (annual = 20% off), ROI calculator, looping
+"Total Recall" ScanSequence demo, testimonials, security/trust panel, FAQ accordion and a
+demo/contact form (POST /api/leads → `leads` collection).
+
+## Job costing & exports
+GET /api/jobs/{id}/costing drives the "Bid vs actual" panel on the takeoff page.
+GET /api/export/invoices.csv (QuickBooks-ready) and /api/export/expenses.csv are linked from
+the Invoices and Profit page headers.
 
 ## Auth
 Email + password, httpOnly `gl_session` cookie. All app routes redirect to `/login` when

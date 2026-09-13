@@ -28,7 +28,66 @@ class User(BaseModel):
     name: str
     company: str = ""
     plan: str = "trial"
+    role: str = "owner"
+    account_id: str | None = None
     created_at: datetime
+
+
+class TeamMember(BaseModel):
+    id: str
+    email: str
+    name: str
+    role: str
+    is_you: bool = False
+    created_at: datetime
+    temp_password: str | None = None
+
+
+class MemberInviteIn(BaseModel):
+    email: EmailStr
+    name: str
+    role: str = "estimator"
+    temp_password: str | None = None
+
+
+class MemberRoleIn(BaseModel):
+    role: str
+
+
+class LeadIn(BaseModel):
+    name: str
+    email: EmailStr
+    company: str = ""
+    phone: str = ""
+    crew_size: str = ""
+    message: str = ""
+    interest: str = "demo"  # demo | enterprise
+
+
+class Lead(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    email: str
+    company: str = ""
+    phone: str = ""
+    crew_size: str = ""
+    message: str = ""
+    interest: str = "demo"
+    created_at: datetime = Field(default_factory=_now)
+
+
+class JobCosting(BaseModel):
+    job_id: str
+    job_name: str
+    quoted_total: float
+    quoted_material: float
+    quoted_labor: float
+    actual_expenses: float
+    invoiced_total: float
+    collected: float
+    variance: float
+    margin_pct: float
+    expense_count: int
 
 
 class Settings(BaseModel):
@@ -41,6 +100,8 @@ class Settings(BaseModel):
     labor_rate: float = 58.0
     company_name: str = ""
     company_email: str = ""
+    pdf_template: str = "contractor_clean"
+    default_scope: str = "supply_install"
 
 
 class SettingsIn(BaseModel):
@@ -52,6 +113,8 @@ class SettingsIn(BaseModel):
     labor_rate: float = 58.0
     company_name: str = ""
     company_email: str = ""
+    pdf_template: str = "contractor_clean"
+    default_scope: str = "supply_install"
 
 
 class TaxDetect(BaseModel):
@@ -88,6 +151,9 @@ class Job(BaseModel):
     cross_check_note: str | None = None
     brief: str = ""
     flags: list[str] = []
+    specs: list[dict] = []
+    spec_filename: str = ""
+    spec_brief: str = ""
     created_at: datetime = Field(default_factory=_now)
 
 
@@ -97,7 +163,10 @@ class TakeoffLine(BaseModel):
     building: str
     unit: str
     room: str
+    scope: str = "supply_install"  # supply_install | install_only | supply_only | misc
     floor_type: str
+    product: str = ""
+    spec_note: str = ""
     sqft: float
     waste_pct: float
     adhesive: str
@@ -105,6 +174,7 @@ class TakeoffLine(BaseModel):
     material_cost_per_sqft: float
     labor_hours: float
     labor_rate: float
+    flat_cost: float = 0.0
     needs_review: bool = False
     review_note: str | None = None
     source: str | None = None
@@ -116,13 +186,16 @@ class LineUpdate(BaseModel):
     building: str | None = None
     unit: str | None = None
     room: str | None = None
+    scope: str | None = None
     floor_type: str | None = None
+    product: str | None = None
     sqft: float | None = None
     waste_pct: float | None = None
     adhesive: str | None = None
     material_cost_per_sqft: float | None = None
     labor_hours: float | None = None
     labor_rate: float | None = None
+    flat_cost: float | None = None
     needs_review: bool | None = None
     approved: bool | None = None
 
@@ -131,8 +204,83 @@ class LineCreate(BaseModel):
     building: str = "Building A"
     unit: str = "Main"
     room: str = "New Room"
+    scope: str = "supply_install"
     floor_type: str = "Luxury Vinyl Plank"
     sqft: float = 0.0
+    flat_cost: float = 0.0
+
+
+class SpecEntry(BaseModel):
+    room_pattern: str = ""
+    surface: str = "floor"
+    floor_type: str = ""
+    product: str = ""
+    adhesive: str | None = None
+    unit_type: str | None = None
+    note: str | None = None
+
+
+class SpecReadResult(BaseModel):
+    specs: list[SpecEntry] = []
+    flags: list[str] = []
+    brief: str = ""
+    engine: str = ""
+    pages: int = 0
+    applied_to_lines: int = 0
+
+
+class UnitTemplateLine(BaseModel):
+    room: str
+    scope: str = "supply_install"
+    floor_type: str = "Luxury Vinyl Plank"
+    product: str = ""
+    sqft: float = 0.0
+    waste_pct: float | None = None
+    flat_cost: float = 0.0
+
+
+class UnitTemplate(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    name: str
+    source_job_id: str | None = None
+    lines: list[UnitTemplateLine] = []
+    created_at: datetime = Field(default_factory=_now)
+
+
+class UnitTemplateSaveIn(BaseModel):
+    name: str
+    building: str
+    unit: str
+
+
+class UnitTemplateApplyIn(BaseModel):
+    job_id: str
+    building: str
+    units: list[str]
+    replace_existing: bool = False
+
+
+class DiffLine(BaseModel):
+    key: str
+    room: str
+    building: str
+    unit: str
+    change: str  # added | removed | changed | unchanged
+    old_cost: float = 0.0
+    new_cost: float = 0.0
+    fields: list[str] = []
+
+
+class QuoteDiff(BaseModel):
+    from_number: str
+    to_number: str
+    from_revision: int
+    to_revision: int
+    from_total: float
+    to_total: float
+    delta: float
+    lines: list[DiffLine]
 
 
 class QuoteIn(BaseModel):
@@ -177,9 +325,37 @@ class Invoice(BaseModel):
     tax_label: str = "Sales Tax"
     tax_amount: float = 0.0
     total: float = 0.0
+    lines: list[dict] = []
+    pay_token: str = ""
+    payment_ref: str = ""
     sent_at: datetime | None = None
     paid_at: datetime | None = None
     created_at: datetime = Field(default_factory=_now)
+
+
+class PayIntent(BaseModel):
+    checkout_url: str
+    invoice_number: str
+    amount: float
+    mocked: bool = True
+
+
+class PublicInvoice(BaseModel):
+    number: str
+    job_name: str = ""
+    company_name: str = ""
+    client_name: str = ""
+    status: str
+    subtotal: float
+    discount_amount: float
+    tax_label: str
+    tax_amount: float
+    total: float
+
+
+class PayCardIn(BaseModel):
+    card_number: str = "4242424242424242"
+    name_on_card: str = ""
 
 
 class ExpenseIn(BaseModel):
@@ -227,11 +403,15 @@ class DashboardStats(BaseModel):
 class Plan(BaseModel):
     id: str
     name: str
-    price: float
+    price: float           # headline (annual-rate) price
+    monthly_price: float = 0.0   # month-to-month rate; 0 for one-off plans
     cadence: str
+    kind: str = "subscription"   # subscription | one_time | contact
+    seats: str = "1 seat"
     blurb: str
     features: list[str]
     highlight: bool = False
+    badge: str = ""
 
 
 class CheckoutIn(BaseModel):

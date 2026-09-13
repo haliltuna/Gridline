@@ -1,11 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Send, CreditCard, FileText } from "lucide-react";
+import { Send, CreditCard, FileText, Download } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import type { Invoice, SendOut } from "@/lib/types";
 import { money } from "@/lib/types";
 import Shell, { Panel, StatusBadge } from "@/components/Shell";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export default function Invoices() {
   const qc = useQueryClient();
@@ -29,7 +30,19 @@ export default function Invoices() {
   const unpaid = rows.filter((r) => r.status !== "paid").reduce((a, b) => a + b.total, 0);
 
   return (
-    <Shell title="Invoices" subtitle="Accepted quotes become invoices. Paid invoices feed the profit summary.">
+    <Shell
+      title="Invoices"
+      subtitle="Accepted quotes become invoices. Paid invoices feed the profit summary."
+      action={
+        <a
+          href="/api/export/invoices.csv"
+          data-testid="invoices-export-csv-link"
+          className={cn(buttonVariants({ variant: "outline" }), "font-semibold")}
+        >
+          <Download className="h-4 w-4" /> Export CSV
+        </a>
+      }
+    >
       <div className="grid gap-4 sm:grid-cols-3">
         <Panel><div className="font-mono text-[11px] uppercase tracking-[0.2em] text-[#E2F952]">Invoices</div><div className="mt-2 font-mono text-3xl font-semibold text-white" data-testid="invoices-count">{rows.length}</div></Panel>
         <Panel><div className="font-mono text-[11px] uppercase tracking-[0.2em] text-[#E2F952]">Outstanding</div><div className="mt-2 font-mono text-3xl font-semibold text-white" data-testid="invoices-outstanding">{money(unpaid)}</div></Panel>

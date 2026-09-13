@@ -21,8 +21,16 @@ INDEXES: dict[str, list[IndexModel]] = {
     "status_checks": [IndexModel([("timestamp", DESCENDING)], name="timestamp_desc")],
     "users": [
         IndexModel([("id", ASCENDING)], name="id", unique=True),
+        # Users are platform-global identities (one login = one person), so email stays
+        # globally unique; the tenant key is account_id.
         IndexModel([("email", ASCENDING)], name="email", unique=True),
+        IndexModel([("account_id", ASCENDING)], name="account_id"),
     ],
+    "unit_templates": [
+        IndexModel([("id", ASCENDING)], name="id", unique=True),
+        IndexModel([("user_id", ASCENDING), ("created_at", DESCENDING)], name="user_created"),
+    ],
+    "leads": [IndexModel([("created_at", DESCENDING)], name="created_desc")],
     "sessions": [
         IndexModel([("token", ASCENDING)], name="token", unique=True),
         IndexModel([("expires_at", ASCENDING)], name="ttl", expireAfterSeconds=0),
@@ -43,6 +51,7 @@ INDEXES: dict[str, list[IndexModel]] = {
     ],
     "invoices": [
         IndexModel([("id", ASCENDING)], name="id", unique=True),
+        IndexModel([("pay_token", ASCENDING)], name="pay_token"),
         IndexModel([("user_id", ASCENDING), ("created_at", DESCENDING)], name="user_created"),
     ],
     "expenses": [

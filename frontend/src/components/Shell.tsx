@@ -1,6 +1,6 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useEffect, type ReactNode } from "react";
-import { LayoutGrid, Upload, FileText, Receipt, Settings as Cog, CreditCard, LogOut, Activity } from "lucide-react";
+import { LayoutGrid, Upload, FileText, Receipt, Settings as Cog, CreditCard, LogOut, Activity, Users } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { endSession } from "@/lib/session";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ const NAV = [
   { to: "/upload", label: "Upload", icon: Upload, id: "upload" },
   { to: "/invoices", label: "Invoices", icon: FileText, id: "invoices" },
   { to: "/expenses", label: "Profit", icon: Receipt, id: "expenses" },
+  { to: "/team", label: "Team", icon: Users, id: "team" },
   { to: "/settings", label: "Settings", icon: Cog, id: "settings" },
   { to: "/billing", label: "Billing", icon: CreditCard, id: "billing" },
 ];

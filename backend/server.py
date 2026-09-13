@@ -63,9 +63,13 @@ async def get_status_checks():
 from routers.auth import router as auth_router  # noqa: E402
 from routers.finance import router as finance_router  # noqa: E402
 from routers.jobs import router as jobs_router  # noqa: E402
+from routers.team import router as team_router  # noqa: E402
+from routers.tools import router as tools_router  # noqa: E402
 
 api_router.include_router(auth_router)
 api_router.include_router(jobs_router)
+api_router.include_router(tools_router)
+api_router.include_router(team_router)
 api_router.include_router(finance_router)
 
 # Include the router in the main app

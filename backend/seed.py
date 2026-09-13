@@ -11,6 +11,10 @@ from lib.db import db, ensure_indexes
 EMAIL = "demo@gridline.app"
 PASSWORD = "gridline123"
 USER_ID = "11111111-1111-4111-8111-111111111111"
+ESTIMATOR_EMAIL = "estimator@gridline.app"
+ESTIMATOR_ID = "22222222-2222-4222-8222-222222222222"
+VIEWER_EMAIL = "viewer@gridline.app"
+VIEWER_ID = "33333333-3333-4333-8333-333333333333"
 
 
 async def main() -> None:
@@ -24,12 +28,25 @@ async def main() -> None:
     now = datetime.now(timezone.utc)
     await db.users.insert_one({
         "id": USER_ID, "email": EMAIL, "name": "Ray Delgado", "company": "Delgado Flooring LLC",
-        "plan": "pro", "password_hash": hash_password(PASSWORD), "created_at": now - timedelta(days=90),
+        "plan": "agency", "role": "owner", "account_id": USER_ID,
+        "password_hash": hash_password(PASSWORD), "created_at": now - timedelta(days=90),
     })
+    # Two extra seats so the roles are visible immediately.
+    for mid, email, name, role, days in [
+        (ESTIMATOR_ID, ESTIMATOR_EMAIL, "Marisol Vega", "estimator", 40),
+        (VIEWER_ID, VIEWER_EMAIL, "Dale Pruitt", "viewer", 20),
+    ]:
+        await db.users.delete_many({"email": email})
+        await db.users.insert_one({
+            "id": mid, "email": email, "name": name, "company": "Delgado Flooring LLC",
+            "plan": "agency", "role": role, "account_id": USER_ID,
+            "password_hash": hash_password(PASSWORD), "created_at": now - timedelta(days=days),
+        })
     await db.settings.insert_one({
         "user_id": USER_ID, "country": "United States", "region": "Texas", "tax_label": "Sales Tax",
         "tax_rate": 6.25, "currency": "USD", "labor_rate": 58.0,
         "company_name": "Delgado Flooring LLC", "company_email": EMAIL,
+        "pdf_template": "contractor_clean", "default_scope": "supply_install",
     })
 
     jobs = [
@@ -96,7 +113,10 @@ async def main() -> None:
                 "revision": 1, "parent_id": None, "status": "sent" if status == "quoted" else "accepted",
                 "discount_pct": 3.0, "tax_label": "Sales Tax", "tax_rate": 6.25, "subtotal": subtotal,
                 "discount_amount": disc, "tax_amount": tax, "total": round(subtotal - disc + tax, 2),
-                "notes": "", "lines": [{**d, "cost": line_cost(d)} for d in docs],
+                # insert_many stamped `_id` onto each line dict — strip it, or the quote
+                # snapshot cannot be serialised by Pydantic on read.
+                "notes": "", "lines": [{k: v for k, v in d.items() if k != "_id"}
+                                       | {"cost": line_cost(d)} for d in docs],
                 "created_at": now - timedelta(days=days_ago - 1),
             })
             if status == "paid":
@@ -109,19 +129,38 @@ async def main() -> None:
                     "created_at": now - timedelta(days=3),
                 })
 
-    for d, cat, vendor, amt in [
-        (0, "Materials", "Shaw Contract", 4820.00),
-        (5, "Adhesive", "Mapei Supply", 1140.50),
-        (11, "Subcontract Labor", "Cruz Install Crew", 6200.00),
-        (19, "Equipment", "United Rentals", 385.75),
-        (26, "Fuel", "Shell Fleet", 268.40),
+    for d, cat, vendor, amt, jid in [
+        (0, "Materials", "Shaw Contract", 4820.00, "seed-job-oakridge"),
+        (5, "Adhesive", "Mapei Supply", 1140.50, "seed-job-oakridge"),
+        (11, "Subcontract Labor", "Cruz Install Crew", 6200.00, "seed-job-linden"),
+        (19, "Equipment", "United Rentals", 385.75, "seed-job-linden"),
+        (26, "Fuel", "Shell Fleet", 268.40, None),
     ]:
         await db.expenses.insert_one({
             "id": str(uuid.uuid4()), "user_id": USER_ID, "date": (now - timedelta(days=d)).strftime("%Y-%m-%d"),
-            "category": cat, "vendor": vendor, "amount": amt, "job_id": None, "note": "",
+            "category": cat, "vendor": vendor, "amount": amt, "job_id": jid, "note": "",
         })
 
-    print(f"seeded {EMAIL} / {PASSWORD}")
+    # One saved unit template so "apply to matching units" is usable out of the box.
+    await db.unit_templates.delete_many({"user_id": USER_ID})
+    await db.unit_templates.insert_one({
+        "id": "seed-tpl-1br", "user_id": USER_ID, "name": "Type A — 1 bed / 1 bath",
+        "source_job_id": "seed-job-oakridge", "created_at": now - timedelta(days=6),
+        "lines": [
+            {"room": "Living / Dining", "scope": "supply_install", "floor_type": "Luxury Vinyl Plank",
+             "product": "", "sqft": 310.0, "waste_pct": 10.0, "flat_cost": 0.0},
+            {"room": "Bedroom 1", "scope": "supply_install", "floor_type": "Carpet Tile",
+             "product": "", "sqft": 140.0, "waste_pct": 5.0, "flat_cost": 0.0},
+            {"room": "Bathroom 1", "scope": "supply_install", "floor_type": "Porcelain Tile",
+             "product": "", "sqft": 50.0, "waste_pct": 10.0, "flat_cost": 0.0},
+            {"room": "Kitchen Backsplash", "scope": "supply_install", "floor_type": "Ceramic Tile",
+             "product": "", "sqft": 22.0, "waste_pct": 10.0, "flat_cost": 0.0},
+            {"room": "Floor prep / grinding", "scope": "misc", "floor_type": "",
+             "product": "", "sqft": 0.0, "waste_pct": 0.0, "flat_cost": 225.0},
+        ],
+    })
+
+    print(f"seeded {EMAIL} / {PASSWORD} (+ estimator@ and viewer@, same password)")
 
 
 if __name__ == "__main__":

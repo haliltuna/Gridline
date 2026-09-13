@@ -49,6 +49,32 @@ TAX_TABLE: dict[str, dict] = {
 }
 
 
+# Pricing scope per line. A contractor bids the same room three different ways.
+SCOPES = {
+    "supply_install": "Supply & Install",
+    "install_only": "Install Only (labor)",
+    "supply_only": "Supply Only (material)",
+    "misc": "Miscellaneous",
+}
+
+# Miscellaneous work is priced as a flat amount, not off square footage.
+MISC_PRESETS = [
+    "Floor prep / grinding",
+    "Self-leveling underlayment",
+    "Demo & haul-away of existing floor",
+    "Moisture barrier / sealer",
+    "Transition strips & trims",
+    "Cove base",
+    "Stair nosing",
+    "Furniture move / protection",
+    "Mobilization",
+]
+
+
+def scope_label(scope: str) -> str:
+    return SCOPES.get(scope, SCOPES["supply_install"])
+
+
 def detect_tax(country: str, region: str | None) -> tuple[str, float]:
     entry = TAX_TABLE.get(country)
     if not entry:

@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, Trash2, TrendingUp } from "lucide-react";
+import { Download, Plus, Trash2, TrendingUp } from "lucide-react";
 import { apiDelete, apiGet, apiPost } from "@/lib/api";
 import type { Expense, ProfitSummary } from "@/lib/types";
 import { money } from "@/lib/types";
 import Shell, { Panel } from "@/components/Shell";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -40,7 +41,28 @@ export default function Expenses() {
   const p = profit.data;
 
   return (
-    <Shell title="Expenses & profit" subtitle="Log what you spend. Paid invoices minus expenses, by month.">
+    <Shell
+      title="Expenses & profit"
+      subtitle="Log what you spend. Paid invoices minus expenses, by month."
+      action={
+        <div className="flex flex-wrap gap-2">
+          <a
+            href="/api/export/expenses.csv"
+            data-testid="export-expenses-csv-link"
+            className={cn(buttonVariants({ variant: "outline" }), "font-semibold")}
+          >
+            <Download className="h-4 w-4" /> Expenses CSV
+          </a>
+          <a
+            href="/api/export/invoices.csv"
+            data-testid="export-invoices-csv-link"
+            className={cn(buttonVariants({ variant: "outline" }), "font-semibold")}
+          >
+            <Download className="h-4 w-4" /> Invoices CSV (QuickBooks)
+          </a>
+        </div>
+      }
+    >
       <div className="grid gap-4 sm:grid-cols-3">
         <Panel><div className="font-mono text-[11px] uppercase tracking-[0.2em] text-[#E2F952]">Revenue (paid)</div><div className="mt-2 font-mono text-3xl font-semibold text-white" data-testid="profit-revenue">{p ? money(p.total_revenue) : "—"}</div></Panel>
         <Panel><div className="font-mono text-[11px] uppercase tracking-[0.2em] text-[#E2F952]">Expenses</div><div className="mt-2 font-mono text-3xl font-semibold text-white" data-testid="profit-expenses">{p ? money(p.total_expenses) : "—"}</div></Panel>
