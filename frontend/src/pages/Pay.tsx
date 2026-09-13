@@ -1,23 +1,23 @@
-import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useEffect } from "react";
+import { useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { CreditCard, Lock, CheckCircle2 } from "lucide-react";
-import { apiGet, apiPost } from "@/lib/api";
-import type { PublicInvoice } from "@/lib/types";
+import { CreditCard, Lock, CheckCircle2, Loader2 } from "lucide-react";
+import { apiGet, apiPost, ApiError } from "@/lib/api";
+import type { CheckoutSession, PaymentStatus, PublicInvoice } from "@/lib/types";
 import { money } from "@/lib/types";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Logo } from "@/components/Shell";
 
-// The page a CLIENT lands on from the emailed Pay Now button. No login: the opaque
-// pay token in the URL is the credential. Stripe is DUMMY here.
+// The page a CLIENT lands on from the emailed Pay Now button. No login: the opaque pay
+// token in the URL is the credential. Payment itself happens on Stripe Checkout — we never
+// see a card number. On return, the session id is polled until Stripe confirms.
 export default function Pay() {
   const { payToken = "" } = useParams();
+  const [params] = useSearchParams();
   const qc = useQueryClient();
-  const [card, setCard] = useState("4242 4242 4242 4242");
-  const [nameOnCard, setNameOnCard] = useState("");
+  const sessionId = params.get("session_id") ?? "";
+  const cancelled = params.get("cancelled") === "1";
 
   const inv = useQuery<PublicInvoice>({
     queryKey: ["pay", payToken],
@@ -25,19 +25,32 @@ export default function Pay() {
     retry: false,
   });
 
-  const pay = useMutation({
-    mutationFn: () => apiPost<PublicInvoice>(`/pay/${payToken}`, {
-      card_number: card.replace(/\s+/g, ""), name_on_card: nameOnCard,
-    }),
-    onSuccess: (d) => {
-      qc.setQueryData(["pay", payToken], d);
-      toast.success("Payment received — thank you");
+  const status = useQuery<PaymentStatus>({
+    queryKey: ["payment-status", sessionId],
+    queryFn: () => apiGet<PaymentStatus>(`/payments/status/${sessionId}`),
+    enabled: Boolean(sessionId),
+    refetchInterval: (q) => (q.state.data?.payment_status === "paid" ? false : 2000),
+    retry: false,
+  });
+
+  useEffect(() => {
+    if (status.data?.payment_status === "paid") {
+      void qc.invalidateQueries({ queryKey: ["pay", payToken] });
+    }
+  }, [status.data?.payment_status, qc, payToken]);
+
+  const checkout = useMutation({
+    mutationFn: () => apiPost<CheckoutSession>(`/pay/${payToken}/checkout`),
+    onSuccess: (s) => { window.location.href = s.checkout_url; },
+    onError: (e) => {
+      const detail = e instanceof ApiError ? (e.body as { detail?: string })?.detail : null;
+      toast.error(detail ?? "Could not open the secure checkout");
     },
-    onError: () => toast.error("Could not take that payment"),
   });
 
   const d = inv.data;
   const paid = d?.status === "paid";
+  const confirming = Boolean(sessionId) && !paid && status.data?.payment_status !== "paid";
 
   return (
     <div className="relative grid min-h-screen place-items-center overflow-hidden bg-[#090D12] px-5 py-12">
@@ -46,7 +59,7 @@ export default function Pay() {
         <div className="mb-6 flex items-center justify-between">
           <Logo />
           <span className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-slate-500">
-            <Lock className="h-3.5 w-3.5" /> Secure payment
+            <Lock className="h-3.5 w-3.5" /> Stripe secure checkout
           </span>
         </div>
 
@@ -92,40 +105,31 @@ export default function Pay() {
                 <div>
                   <p className="text-lg font-semibold text-emerald-200">Paid in full</p>
                   <p className="mt-1 text-sm text-emerald-300/80">
-                    A receipt has been recorded against {d.number}. You can close this page.
+                    Stripe has confirmed the payment against {d.number}. You can close this page.
                   </p>
                 </div>
               </div>
             ) : (
-              <form className="space-y-4 px-7 pb-7" data-testid="pay-form"
-                    onSubmit={(e) => { e.preventDefault(); pay.mutate(); }}>
-                <div className="space-y-2">
-                  <Label htmlFor="pay-name" className="text-slate-300">Name on card</Label>
-                  <Input id="pay-name" data-testid="pay-name-input" value={nameOnCard} required
-                         onChange={(e) => setNameOnCard(e.target.value)} placeholder="Full name" className="h-12 text-base" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="pay-card" className="text-slate-300">Card number</Label>
-                  <Input id="pay-card" data-testid="pay-card-input" value={card}
-                         onChange={(e) => setCard(e.target.value)} className="h-12 font-mono text-base" />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="pay-exp" className="text-slate-300">Expiry</Label>
-                    <Input id="pay-exp" data-testid="pay-expiry-input" defaultValue="12/34" className="h-12 font-mono text-base" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="pay-cvc" className="text-slate-300">CVC</Label>
-                    <Input id="pay-cvc" data-testid="pay-cvc-input" defaultValue="123" className="h-12 font-mono text-base" />
-                  </div>
-                </div>
-                <Button type="submit" size="lg" className="w-full font-semibold" data-testid="pay-submit-button" disabled={pay.isPending}>
-                  <CreditCard className="h-4 w-4" /> {pay.isPending ? "Processing…" : `Pay ${money(d.total)}`}
+              <div className="space-y-4 px-7 pb-7" data-testid="pay-form">
+                {cancelled && (
+                  <p className="border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200" data-testid="pay-cancelled">
+                    Checkout was cancelled — nothing has been charged.
+                  </p>
+                )}
+                {confirming && (
+                  <p className="flex items-center gap-2 border border-slate-700 bg-[#131D2A] px-4 py-3 text-sm text-slate-300" data-testid="pay-confirming">
+                    <Loader2 className="h-4 w-4 animate-spin text-[#E2F952]" /> Confirming your payment with Stripe…
+                  </p>
+                )}
+                <Button size="lg" className="w-full font-semibold" data-testid="pay-submit-button"
+                        disabled={checkout.isPending} onClick={() => checkout.mutate()}>
+                  <CreditCard className="h-4 w-4" />
+                  {checkout.isPending ? "Opening secure checkout…" : `Pay ${money(d.total)} by card`}
                 </Button>
                 <p className="text-center font-mono text-[11px] text-slate-600">
-                  DEMO CHECKOUT — no card is charged and no card details are stored.
+                  Card details are entered on Stripe, never on this page. TEST MODE — use 4242 4242 4242 4242.
                 </p>
-              </form>
+              </div>
             )}
           </div>
         )}

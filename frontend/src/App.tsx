@@ -11,6 +11,10 @@ import SettingsPage from "@/pages/SettingsPage";
 import Billing from "@/pages/Billing";
 import Team from "@/pages/Team";
 import Pay from "@/pages/Pay";
+import Costing from "@/pages/Costing";
+import Leads from "@/pages/Leads";
+import LandingV2 from "@/pages/LandingV2";
+import PaymentResult from "@/pages/PaymentResult";
 
 // One <Route> per page in src/pages; BrowserRouter already wraps this in main.tsx.
 export default function App() {
@@ -27,6 +31,12 @@ export default function App() {
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/billing" element={<Billing />} />
         <Route path="/team" element={<Team />} />
+        <Route path="/costing" element={<Costing />} />
+        <Route path="/leads" element={<Leads />} />
+        {/* Design variation of the landing page, kept side by side for comparison. */}
+        <Route path="/v2" element={<LandingV2 />} />
+        <Route path="/payment/success" element={<PaymentResult />} />
+        <Route path="/payment/cancel" element={<PaymentResult cancelled />} />
         {/* Public: the client pays from an emailed link, with no Gridline account. */}
         <Route path="/pay/:payToken" element={<Pay />} />
         <Route path="*" element={<Landing />} />

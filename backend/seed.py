@@ -160,6 +160,19 @@ async def main() -> None:
         ],
     })
 
+    # a couple of demo requests so the lead inbox is not an empty screen
+    for lead in [
+        {"id": "seed-lead-1", "name": "Priya Raman", "email": "priya@ramansurfaces.com",
+         "company": "Raman Surfaces", "phone": "+1 602 555 0144", "crew_size": "4",
+         "interest": "enterprise", "message": "Bidding 3 garden-style communities a month in AZ and NV. Need pooled page volume and SSO.",
+         "created_at": datetime.now(timezone.utc)},
+        {"id": "seed-lead-2", "name": "Gus Whitfield", "email": "gus@whitfieldfloors.ca",
+         "company": "Whitfield Floors", "phone": "", "crew_size": "1",
+         "interest": "demo", "message": "One-man shop, mostly tenant improvement. Want to see it read a 90-page set.",
+         "created_at": datetime.now(timezone.utc)},
+    ]:
+        await db.leads.update_one({"id": lead["id"]}, {"$set": lead}, upsert=True)
+
     print(f"seeded {EMAIL} / {PASSWORD} (+ estimator@ and viewer@, same password)")
 
 

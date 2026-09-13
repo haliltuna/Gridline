@@ -351,3 +351,98 @@ export const money = (n: number) =>
 
 export const num = (n: number, d = 0) =>
   n.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+
+// ---- billing, usage & payments (mirrors backend/models/billing.py) ----
+export interface PlanTier {
+  id: string;
+  name: string;
+  price: number;
+  monthly_price: number;
+  cadence: string;
+  kind: string;
+  seats: string;
+  seat_count: number;
+  badge: string;
+  blurb: string;
+  features: string[];
+  capabilities: string[];
+  pages_included: number;
+  jobs_included: number;
+  max_file_mb: number;
+  overage_per_page: number;
+  highlight: boolean;
+}
+
+export interface CostLine {
+  item: string;
+  detail: string;
+  cost: number;
+}
+
+export interface CompetitorRow {
+  name: string;
+  price: string;
+  note: string;
+}
+
+export interface CostModel {
+  page_cost: number;
+  target_margin: number;
+  overage_per_page: number;
+  breakdown: CostLine[];
+  competitors: CompetitorRow[];
+}
+
+export interface Usage {
+  plan_id: string;
+  plan_name: string;
+  period: string;
+  pages_included: number;
+  pages_used: number;
+  jobs_included: number;
+  jobs_used: number;
+  max_file_mb: number;
+  overage_pages: number;
+  overage_cost: number;
+  capabilities: string[];
+  seat_count: number;
+  seats_used: number;
+}
+
+export interface CheckoutSession {
+  checkout_url: string;
+  session_id: string;
+  amount: number;
+  mocked: boolean;
+}
+
+export interface PaymentStatus {
+  session_id: string;
+  status: string;
+  payment_status: string;
+  kind: string;
+  amount: number;
+}
+
+export interface CostingRow {
+  job_id: string;
+  job_name: string;
+  client_name: string;
+  status: string;
+  quoted_total: number;
+  actual_expenses: number;
+  invoiced_total: number;
+  collected: number;
+  variance: number;
+  margin_pct: number;
+  expense_count: number;
+}
+
+export interface CostingOverview {
+  rows: CostingRow[];
+  quoted_total: number;
+  actual_total: number;
+  collected_total: number;
+  variance_total: number;
+  margin_pct: number;
+}

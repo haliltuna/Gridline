@@ -5,51 +5,53 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 
+from lib import mailer
 from lib.ai import line_cost
 from lib.auth import current_user
 from lib.authz import account_id, require
 from lib.db import db
 from lib.flooring import TAX_TABLE, detect_tax
+from lib.pdf import quote_pdf
+from lib.pricing import (
+    CAP_CHANGE_ORDER, CAP_COSTING, CAP_EXPORT, CAP_INVOICE, CAP_QUOTE, COMPETITORS,
+    COST_BREAKDOWN, OVERAGE_PER_PAGE, PAGE_COST, PLANS as PLAN_DICTS, TARGET_MARGIN,
+    has_cap, plan_for, upgrade_message,
+)
+from models.billing import (
+    CompetitorRow, CostLine, CostModel, CostingOverview, CostingRow, PlanTier, Usage,
+)
 from models.schemas import (
     CheckoutIn, CheckoutOut, DashboardStats, Expense, ExpenseIn, Invoice, JobCosting,
-    Lead, LeadIn, MonthSummary, PayCardIn, PayIntent, Plan, ProfitSummary, PublicInvoice,
+    Lead, LeadIn, MonthSummary, PayIntent, ProfitSummary, PublicInvoice,
     Quote, QuoteIn, SendOut, Settings, SettingsIn, TaxDetect,
 )
 
 router = APIRouter(tags=["finance"])
 
-PLANS = [
-    Plan(id="single", name="Single Job", price=39, monthly_price=0, cadence="per takeoff",
-         kind="one_time", seats="1 seat", highlight=False, badge="",
-         blurb="For the contractor bidding the occasional job.",
-         features=["One blueprint set", "Full flooring logic", "Spec-sheet reading",
-                   "One quote + one invoice", "No subscription"]),
-    Plan(id="five", name="Five Pack", price=99, monthly_price=0, cadence="one-time",
-         kind="one_time", seats="1 seat", highlight=False, badge="Best value per job",
-         blurb="Five jobs, one price. Built for a busy bid season.",
-         features=["Up to 5 blueprint takeoffs", "Quotes + invoicing", "Change orders",
-                   "Expense log", "Credits never expire"]),
-    # Headline prices are the ANNUAL rate; monthly_price is the month-to-month rate (annual = 20% off).
-    Plan(id="pro", name="Unlimited Pro", price=249, monthly_price=311, cadence="per month",
-         kind="subscription", seats="2 seats included", highlight=True, badge="Most popular",
-         blurb="Ongoing commercial and multi-family work. 14-day free trial, no card.",
-         features=["Unlimited blueprint uploads", "Unlimited buildings & units",
-                   "Spec sheets + unit templates", "Change orders with full revision history",
-                   "Expenses, profit & bid-vs-actual costing", "Branded quote & invoice PDFs",
-                   "2 seats (owner + estimator)"]),
-    Plan(id="agency", name="Agency", price=999, monthly_price=1249, cadence="per month",
-         kind="subscription", seats="10 seats included", highlight=False, badge="Multi-seat",
-         blurb="Multiple estimators bidding at once across several crews.",
-         features=["Everything in Unlimited Pro", "10 seats with owner / estimator / viewer roles",
-                   "Priority blueprint queue", "Shared unit-template library",
-                   "CSV / accounting export", "Named onboarding session"]),
-    Plan(id="enterprise", name="Enterprise", price=0, monthly_price=0, cadence="custom quote",
-         kind="contact", seats="Unlimited seats", highlight=False, badge="Talk to us",
-         blurb="Regional and national subcontractors with custom workflows.",
-         features=["Unlimited seats & accounts", "Custom floor types and cost books",
-                   "Single sign-on", "API access", "Dedicated support with SLA"]),
-]
 
+async def _account_doc(user: dict) -> dict:
+    return await db.users.find_one({"id": account_id(user)}, {"_id": 0}) or {}
+
+
+async def _plan_of(user: dict) -> dict:
+    return plan_for((await _account_doc(user)).get("plan"))
+
+
+async def _needs(user: dict, cap: str) -> None:
+    """Plan gating. Roles decide WHO may act; the plan decides WHAT the account can do."""
+    plan_id = (await _account_doc(user)).get("plan")
+    if not has_cap(plan_id, cap):
+        raise HTTPException(status_code=402, detail=upgrade_message(plan_id, cap))
+
+
+async def _company(user: dict) -> dict:
+    s = await db.settings.find_one({"user_id": account_id(user)}, {"_id": 0}) or {}
+    return {
+        "name": s.get("company_name") or user.get("company") or "Gridline",
+        "email": s.get("company_email") or user.get("email", ""),
+        "currency": s.get("currency", "USD"),
+        "template": s.get("pdf_template", "contractor_clean"),
+    }
 
 # ---------- settings ----------
 @router.get("/settings", response_model=Settings)
@@ -101,6 +103,7 @@ async def job_quotes(job_id: str, user: dict = Depends(require("quote:read"))):
 
 @router.post("/jobs/{job_id}/quotes", response_model=Quote)
 async def create_quote(job_id: str, body: QuoteIn, user: dict = Depends(require("quote:write"))):
+    await _needs(user, CAP_QUOTE)
     job = await db.jobs.find_one({"id": job_id, "user_id": account_id(user)}, {"_id": 0})
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -113,6 +116,8 @@ async def create_quote(job_id: str, body: QuoteIn, user: dict = Depends(require(
     tax_label = body.tax_label or settings.get("tax_label", "Sales Tax")
 
     prior = await db.quotes.find({"job_id": job_id}, {"_id": 0}).sort("revision", -1).to_list(1)
+    if prior:
+        await _needs(user, CAP_CHANGE_ORDER)
     revision = (prior[0]["revision"] + 1) if prior else 1
     if prior:
         await db.quotes.update_many({"job_id": job_id}, {"$set": {"status": "superseded"}})
@@ -144,9 +149,28 @@ async def send_quote(quote_id: str, user: dict = Depends(require("quote:write"))
     q = await _quote_or_404(quote_id, account_id(user))
     job = await db.jobs.find_one({"id": q["job_id"]}, {"_id": 0}) or {}
     to = job.get("client_email") or user["email"]
+    company = await _company(user)
+    pdf = quote_pdf("QUOTE", q, job, company, company["template"])
+    html = mailer.shell(
+        title=f"Quote {q['number']}",
+        intro=(f"{company['name']} has prepared a flooring quote for "
+               f"<strong>{job.get('name', 'your project')}</strong>. The full line-item takeoff "
+               f"is attached as a PDF."),
+        rows=[("Subtotal", f"${q['subtotal']:,.2f}"),
+              ("Discount", f"-${q['discount_amount']:,.2f}"),
+              (q["tax_label"], f"${q['tax_amount']:,.2f}"),
+              ("Quote total", f"${q['total']:,.2f}")],
+        cta=None,
+        footer=f"Questions? Reply to this email or contact {company['email']}.",
+    )
+    sent = await mailer.send(to, f"Quote {q['number']} — {job.get('name', '')}", html,
+                             attachment=(f"{q['number']}.pdf", pdf))
     await db.quotes.update_one({"id": quote_id}, {"$set": {"status": "sent"}})
+    note = ("emailed with the quote PDF attached" if sent["delivered"]
+            else f"NOT delivered — {sent['error']}")
     return SendOut(ok=True, to=to, subject=f"Quote {q['number']} — {job.get('name', '')}",
-                   message=f"Quote {q['number']} emailed to {to} with a Pay Now link.")
+                   mocked=not sent["delivered"],
+                   message=f"Quote {q['number']} {note} ({to}).")
 
 
 @router.post("/quotes/{quote_id}/accept", response_model=Quote)
@@ -167,6 +191,7 @@ async def list_invoices(user: dict = Depends(require("invoice:read"))):
 
 @router.post("/quotes/{quote_id}/invoice", response_model=Invoice)
 async def invoice_from_quote(quote_id: str, user: dict = Depends(require("invoice:write"))):
+    await _needs(user, CAP_INVOICE)
     q = await _quote_or_404(quote_id, account_id(user))
     if q["status"] != "accepted":
         raise HTTPException(status_code=400, detail="Quote must be accepted before invoicing")
@@ -195,9 +220,36 @@ async def _invoice_or_404(invoice_id: str, user_id: str) -> dict:
 async def send_invoice(invoice_id: str, user: dict = Depends(require("invoice:write"))):
     inv = await _invoice_or_404(invoice_id, account_id(user))
     to = inv.get("client_email") or user["email"]
+    company = await _company(user)
+    job = await db.jobs.find_one({"id": inv["job_id"]}, {"_id": 0}) or {}
+    token = inv.get("pay_token") or uuid.uuid4().hex
+    if not inv.get("pay_token"):
+        await db.invoices.update_one({"id": invoice_id}, {"$set": {"pay_token": token}})
+    if not inv.get("lines"):
+        q = await db.quotes.find_one({"id": inv.get("quote_id")}, {"_id": 0}) or {}
+        inv = {**inv, "lines": q.get("lines", [])}
+    pdf = quote_pdf("INVOICE", inv, job, company, company["template"])
+    pay_url = f"{os.environ.get('APP_URL', '').rstrip('/')}/pay/{token}"
+    html = mailer.shell(
+        title=f"Invoice {inv['number']}",
+        intro=(f"{company['name']} has issued an invoice for "
+               f"<strong>{inv.get('job_name', 'your project')}</strong>. The itemised invoice is "
+               f"attached; you can pay securely by card using the button below."),
+        rows=[("Subtotal", f"${inv['subtotal']:,.2f}"),
+              ("Discount", f"-${inv['discount_amount']:,.2f}"),
+              (inv["tax_label"], f"${inv['tax_amount']:,.2f}"),
+              ("Amount due", f"${inv['total']:,.2f}")],
+        cta=("Pay now by card", pay_url),
+        footer=f"Payments are processed by Stripe. Questions? Contact {company['email']}.",
+    )
+    sent = await mailer.send(to, f"Invoice {inv['number']} — {inv.get('job_name', '')}", html,
+                             attachment=(f"{inv['number']}.pdf", pdf))
     await db.invoices.update_one({"id": invoice_id}, {"$set": {"status": "sent", "sent_at": datetime.now(timezone.utc)}})
+    note = ("emailed with the PDF and a Stripe Pay Now button" if sent["delivered"]
+            else f"NOT delivered — {sent['error']}")
     return SendOut(ok=True, to=to, subject=f"Invoice {inv['number']}",
-                   message=f"Invoice {inv['number']} emailed to {to} with a Stripe Pay Now button.")
+                   mocked=not sent["delivered"],
+                   message=f"Invoice {inv['number']} {note} ({to}).")
 
 
 @router.post("/invoices/{invoice_id}/pay", response_model=Invoice)
@@ -241,29 +293,10 @@ async def public_invoice(pay_token: str):
     )
 
 
-@router.post("/pay/{pay_token}", response_model=PublicInvoice)
-async def public_pay(pay_token: str, body: PayCardIn):
-    inv = await db.invoices.find_one({"pay_token": pay_token}, {"_id": 0})
-    if not inv:
-        raise HTTPException(status_code=404, detail="That payment link is not valid")
-    if inv["status"] != "paid":
-        now = datetime.now(timezone.utc)
-        ref = f"pi_dummy_{uuid.uuid4().hex[:16]}"
-        await db.invoices.update_one({"pay_token": pay_token},
-                                    {"$set": {"status": "paid", "paid_at": now, "payment_ref": ref}})
-        await db.jobs.update_one({"id": inv["job_id"]}, {"$set": {"status": "paid"}})
-        inv["status"] = "paid"
-    settings = await db.settings.find_one({"user_id": inv["user_id"]}, {"_id": 0}) or {}
-    return PublicInvoice(
-        number=inv["number"], job_name=inv.get("job_name", ""),
-        company_name=settings.get("company_name") or "Gridline",
-        client_name=inv.get("client_name", ""), status=inv["status"], subtotal=inv["subtotal"],
-        discount_amount=inv["discount_amount"], tax_label=inv["tax_label"],
-        tax_amount=inv["tax_amount"], total=inv["total"],
-    )
+# The old dummy "mark it paid" endpoint is gone: client payments now go through real
+# Stripe Checkout at POST /api/pay/{token}/checkout (routers/payments.py).
 
 
-# ---------- leads: book a demo / enterprise enquiry (public) ----------
 @router.post("/leads", response_model=Lead)
 async def create_lead(body: LeadIn):
     lead = Lead(**{**body.model_dump(), "email": str(body.email)})
@@ -308,6 +341,59 @@ async def job_costing(job_id: str, user: dict = Depends(require("job:read"))):
     )
 
 
+# ---------- bid vs actual across every job, worst variance first ----------
+@router.get("/costing/overview", response_model=CostingOverview)
+async def costing_overview(user: dict = Depends(require("job:read"))):
+    await _needs(user, CAP_COSTING)
+    acct = account_id(user)
+    jobs = await db.jobs.find({"user_id": acct}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    quotes = await db.quotes.find({"user_id": acct}, {"_id": 0, "job_id": 1, "revision": 1, "total": 1}).to_list(2000)
+    latest: dict[str, dict] = {}
+    for q in quotes:
+        cur = latest.get(q["job_id"])
+        if not cur or q["revision"] > cur["revision"]:
+            latest[q["job_id"]] = q
+    expenses = await db.expenses.find({"user_id": acct}, {"_id": 0, "job_id": 1, "amount": 1}).to_list(5000)
+    invoices = await db.invoices.find({"user_id": acct}, {"_id": 0, "job_id": 1, "total": 1, "status": 1}).to_list(2000)
+
+    spend: dict[str, float] = defaultdict(float)
+    counts: dict[str, int] = defaultdict(int)
+    for e in expenses:
+        spend[e.get("job_id") or ""] += float(e.get("amount", 0))
+        counts[e.get("job_id") or ""] += 1
+    invoiced: dict[str, float] = defaultdict(float)
+    collected: dict[str, float] = defaultdict(float)
+    for i in invoices:
+        invoiced[i["job_id"]] += float(i.get("total", 0))
+        if i.get("status") == "paid":
+            collected[i["job_id"]] += float(i.get("total", 0))
+
+    rows: list[CostingRow] = []
+    for job in jobs:
+        jid = job["id"]
+        quoted = float(latest.get(jid, {}).get("total", 0.0))
+        actual = spend[jid]
+        revenue = invoiced[jid] or quoted
+        rows.append(CostingRow(
+            job_id=jid, job_name=job.get("name", ""), client_name=job.get("client_name", ""),
+            status=job.get("status", ""), quoted_total=round(quoted, 2),
+            actual_expenses=round(actual, 2), invoiced_total=round(invoiced[jid], 2),
+            collected=round(collected[jid], 2), variance=round(revenue - actual, 2),
+            margin_pct=round((revenue - actual) / revenue * 100, 1) if revenue else 0.0,
+            expense_count=counts[jid],
+        ))
+    rows.sort(key=lambda r: r.margin_pct if r.quoted_total or r.actual_expenses else 999)
+    quoted_total = sum(r.quoted_total for r in rows)
+    actual_total = sum(r.actual_expenses for r in rows)
+    revenue_total = sum(r.invoiced_total or r.quoted_total for r in rows)
+    return CostingOverview(
+        rows=rows, quoted_total=round(quoted_total, 2), actual_total=round(actual_total, 2),
+        collected_total=round(sum(r.collected for r in rows), 2),
+        variance_total=round(revenue_total - actual_total, 2),
+        margin_pct=round((revenue_total - actual_total) / revenue_total * 100, 1) if revenue_total else 0.0,
+    )
+
+
 # ---------- CSV export for the bookkeeper ----------
 def _csv(rows: list[list[str]]) -> Response:
     body = "\n".join(",".join('"' + str(c).replace('"', '""') + '"' for c in r) for r in rows)
@@ -317,6 +403,7 @@ def _csv(rows: list[list[str]]) -> Response:
 
 @router.get("/export/invoices.csv")
 async def export_invoices(user: dict = Depends(require("export:read"))):
+    await _needs(user, CAP_EXPORT)
     docs = await db.invoices.find({"user_id": account_id(user)}, {"_id": 0}).sort("created_at", -1).to_list(2000)
     rows: list[list[str]] = [["Invoice", "Job", "Client", "Client email", "Status", "Subtotal",
                               "Discount", "Tax label", "Tax", "Total", "Created", "Paid"]]
@@ -331,6 +418,7 @@ async def export_invoices(user: dict = Depends(require("export:read"))):
 
 @router.get("/export/expenses.csv")
 async def export_expenses(user: dict = Depends(require("export:read"))):
+    await _needs(user, CAP_EXPORT)
     acct = account_id(user)
     docs = await db.expenses.find({"user_id": acct}, {"_id": 0}).sort("date", -1).to_list(5000)
     jobs = {j["id"]: j.get("name", "") for j in
@@ -406,20 +494,63 @@ async def dashboard_stats(user: dict = Depends(require("job:read"))):
                           paid_this_month=round(paid_month, 2), sqft_measured=round(sqft, 1))
 
 
-# ---------- billing (Stripe MOCKED) ----------
-@router.get("/billing/plans", response_model=list[Plan])
+# ---------- billing: plans, real usage against the plan's caps, unit-cost transparency ----------
+@router.get("/billing/plans", response_model=list[PlanTier])
 async def billing_plans():
-    return PLANS
+    return [PlanTier(**p) for p in PLAN_DICTS]
+
+
+@router.get("/billing/cost-model", response_model=CostModel)
+async def billing_cost_model():
+    """What a page actually costs us, published so the pricing is defensible."""
+    return CostModel(
+        page_cost=PAGE_COST, target_margin=TARGET_MARGIN, overage_per_page=OVERAGE_PER_PAGE,
+        breakdown=[CostLine(**c) for c in COST_BREAKDOWN],
+        competitors=[CompetitorRow(**c) for c in COMPETITORS],
+    )
+
+
+@router.get("/billing/usage", response_model=Usage)
+async def billing_usage(user: dict = Depends(require("settings:read"))):
+    acct = account_id(user)
+    doc = await _account_doc(user)
+    plan = plan_for(doc.get("plan"))
+    start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    # One-off plans count for the life of the purchase; subscriptions reset each month.
+    since = {"$gte": start} if plan["kind"] in ("subscription", "trial") else {"$gte": datetime(2000, 1, 1)}
+    jobs = await db.jobs.find({"user_id": acct, "created_at": since},
+                              {"_id": 0, "pages": 1, "pages_read": 1}).to_list(2000)
+    pages = sum(int(j.get("pages_read") or j.get("pages") or 0) for j in jobs)
+    seats = await db.users.count_documents({"$or": [{"id": acct}, {"account_id": acct}]})
+    included = plan["pages_included"]
+    over = max(0, pages - included) if included >= 0 else 0
+    return Usage(
+        plan_id=plan["id"], plan_name=plan["name"], period=doc.get("plan_period", "annual"),
+        pages_included=included, pages_used=pages, jobs_included=plan["jobs_included"],
+        jobs_used=len(jobs), max_file_mb=plan["max_file_mb"], overage_pages=over,
+        overage_cost=round(over * plan["overage_per_page"], 2),
+        capabilities=plan["capabilities"], seat_count=plan["seat_count"], seats_used=seats,
+    )
 
 
 @router.post("/billing/checkout", response_model=CheckoutOut)
 async def billing_checkout(body: CheckoutIn, user: dict = Depends(require("billing:write"))):
-    plan = next((p for p in PLANS if p.id == body.plan_id), None)
+    """Kept for the free trial only — a real card goes through POST /api/payments/checkout."""
+    plan = next((p for p in PLAN_DICTS if p["id"] == body.plan_id), None)
     if not plan:
         raise HTTPException(status_code=404, detail="Unknown plan")
-    await db.users.update_one({"id": account_id(user)}, {"$set": {"plan": plan.id}})
-    return CheckoutOut(ok=True, plan=plan.name,
-                       message=f"{plan.name} activated (Stripe checkout is mocked in this build).")
+    if plan["kind"] not in ("trial", "contact"):
+        raise HTTPException(status_code=400, detail="Paid plans go through Stripe checkout")
+    await db.users.update_one({"id": account_id(user)}, {"$set": {"plan": plan["id"]}})
+    return CheckoutOut(ok=True, plan=plan["name"], mocked=False,
+                       message=f"{plan['name']} activated.")
 
 
-_ = uuid
+# ---------- lead inbox (owner only) ----------
+@router.get("/leads", response_model=list[Lead])
+async def list_leads(user: dict = Depends(require("team:write"))):
+    docs = await db.leads.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return [Lead(**d) for d in docs]
+
+
+_ = uuid, current_user

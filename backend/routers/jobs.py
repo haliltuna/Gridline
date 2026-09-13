@@ -7,6 +7,7 @@ from lib.ai import build_line, line_cost, read_blueprint
 from lib.authz import account_id, require
 from lib.db import db
 from lib.flooring import adhesive_gallons, defaults_for
+from lib.pricing import plan_for
 from models.schemas import Job, JobIn, LineCreate, LineUpdate, TakeoffLine
 
 router = APIRouter(tags=["jobs"])
@@ -59,6 +60,38 @@ async def upload_blueprint(job_id: str, file: UploadFile = File(...), user: dict
         raise HTTPException(status_code=400, detail="Empty file")
     if not (file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Blueprint must be a PDF")
+
+    # Plan caps: file size, monthly page volume and job count. Pages are what actually cost
+    # us money (one Opus vision call each), so that is the meter.
+    acct_doc = await db.users.find_one({"id": account_id(user)}, {"_id": 0}) or {}
+    plan = plan_for(acct_doc.get("plan"))
+    size_mb = len(raw) / (1024 * 1024)
+    if size_mb > plan["max_file_mb"]:
+        raise HTTPException(status_code=413, detail=(
+            f"That PDF is {size_mb:.0f} MB — {plan['name']} allows {plan['max_file_mb']} MB per file. "
+            f"Split the set or upgrade your plan."))
+    if plan["jobs_included"] >= 0:
+        start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        window = {"$gte": start} if plan["kind"] in ("subscription", "trial") else {"$gte": datetime(2000, 1, 1, tzinfo=timezone.utc)}
+        used = await db.jobs.count_documents({
+            "user_id": account_id(user), "created_at": window,
+            "status": {"$ne": "draft"}, "id": {"$ne": job_id},
+        })
+        if used >= plan["jobs_included"]:
+            raise HTTPException(status_code=402, detail=(
+                f"{plan['name']} includes {plan['jobs_included']} job(s) — you have used {used}. "
+                f"Upgrade on the Billing page to read another set."))
+    if plan["pages_included"] >= 0:
+        start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        window = {"$gte": start} if plan["kind"] in ("subscription", "trial") else {"$gte": datetime(2000, 1, 1, tzinfo=timezone.utc)}
+        prior = await db.jobs.find({"user_id": account_id(user), "created_at": window},
+                                   {"_id": 0, "pages": 1, "pages_read": 1, "id": 1}).to_list(2000)
+        used_pages = sum(int(j.get("pages_read") or j.get("pages") or 0) for j in prior if j["id"] != job_id)
+        if plan["overage_per_page"] <= 0 and used_pages >= plan["pages_included"]:
+            raise HTTPException(status_code=402, detail=(
+                f"{plan['name']} includes {plan['pages_included']} blueprint pages and you have read "
+                f"{used_pages}. Upgrade on the Billing page to keep going."))
+
     try:
         result = await read_blueprint(raw, file.filename or "blueprint.pdf")
     except Exception as exc:

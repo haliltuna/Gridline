@@ -39,15 +39,52 @@ shadcn (base-nova) · TanStack Query · httpOnly cookie sessions.
 5. `/settings` auto-detects tax (GST/HST/PST/QST/VAT/sales tax) from country + state/province
    via GET /api/tax/detect; every field stays editable.
 
-## Pricing tiers (GET /api/billing/plans)
-Single Job $39/takeoff · Five Pack $99 one-time · Unlimited Pro $249/mo annual ($311 monthly,
-2 seats, 14-day trial) · Agency $999/mo annual ($1249 monthly, 10 seats) · Enterprise (contact).
-Landing `/` shows an annual/monthly toggle (annual = 20% off), ROI calculator, looping
-"Total Recall" ScanSequence demo, testimonials, security/trust panel, FAQ accordion and a
-demo/contact form (POST /api/leads → `leads` collection).
+## Pricing tiers (backend/lib/pricing.py — single source of truth)
+Unit cost that drives everything: one blueprint page read by Claude Opus at 200 DPI costs
+**$0.115** ($0.045 input image+prompt, $0.060 output JSON, $0.010 render/storage/db). Every
+paid tier is sized so a fully-used allowance still leaves ~75% gross margin (~2 pages per $1);
+overage is $0.50/page ($0.40 on Agency) rather than a hard stop.
+
+| Tier | Price | Pages | Jobs | Seats | Max PDF | Capabilities |
+|---|---|---|---|---|---|---|
+| Trial (14 days) | free | 60 | 2 | 1 | 80 MB | takeoff, pdf, quote |
+| Single Takeoff | $49 one-off | 90 total | 1 | 1 | 80 MB | takeoff, pdf ONLY |
+| Crew | $199/mo annual ($249 monthly) | 400/mo | 10/mo | 2 | 120 MB | + quote, invoice, change orders |
+| Contractor Pro | $499/mo annual ($624) | 1000/mo | unlimited | 5 | 200 MB | + costing, export, templates |
+| Agency | $999/mo annual ($1249) | 2000/mo | unlimited | 15 | 300 MB | + API |
+| Enterprise | custom | pooled | unlimited | unlimited | 500 MB | everything |
+
+Gating: `lib/pricing.has_cap` + `_needs()` in routers/finance.py return **402** with an upgrade
+message when the plan lacks a capability (quote, invoice, change order, costing, export).
+Upload caps (file MB, monthly pages, monthly jobs) are enforced in routers/jobs.py.
+GET /api/billing/plans · /api/billing/usage · /api/billing/cost-model (cost breakdown +
+competitor comparison, shown on the landing page and Billing page).
+
+## Payments — real Stripe Checkout (TEST mode)
+routers/payments.py. Keys in backend/.env (STRIPE_SECRET_KEY/WEBHOOK_SECRET), catalog created
+by `python setup_stripe.py` (lookup keys gridline_<tier>_annual|monthly, gridline_single).
+- POST /api/payments/checkout {plan_id, period, origin_url} → hosted Checkout (Managed
+  Payments with automatic_tax fallback); fulfilment switches the account plan.
+- POST /api/pay/{pay_token}/checkout → public ad-hoc session for a client invoice
+  (managed_payments disabled: the contractor's own tax line is already in the total).
+- GET /api/payments/status/{session_id} re-reads Stripe before reporting paid;
+  POST /api/stripe/webhook handles completed/async/expired/refunded. Both share one
+  idempotent `_mark_paid` guard on payment_transactions.
+- Frontend: /billing (plan purchase), /pay/{token} (client), /payment/success, /payment/cancel.
+- Test card 4242 4242 4242 4242. Verified end to end: INV-ORVIEW-R1 paid $8,189.98.
+
+## Email — Resend with PDF attachment
+backend/lib/mailer.py. Quote and invoice sends build the PDF (lib/pdf.quote_pdf) and attach it;
+invoice emails carry a Stripe Pay Now button pointing at /pay/{token}. Requires RESEND_API_KEY
+in backend/.env — when absent the send returns `mocked: true` with the reason and the flow
+still completes.
+
+## Lead inbox
+POST /api/leads (public, landing pages) → `leads`; GET /api/leads (owner only) → /leads page.
 
 ## Job costing & exports
-GET /api/jobs/{id}/costing drives the "Bid vs actual" panel on the takeoff page.
+GET /api/jobs/{id}/costing drives the "Bid vs actual" panel on the takeoff page, and
+GET /api/costing/overview drives the portfolio-wide /costing page (worst margin first).
 GET /api/export/invoices.csv (QuickBooks-ready) and /api/export/expenses.csv are linked from
 the Invoices and Profit page headers.
 
@@ -65,3 +102,9 @@ Email + password, httpOnly `gl_session` cookie. All app routes redirect to `/log
 ## Seed
 `cd /app/backend && python seed.py` — demo user + 3 jobs (Oakridge Commons takeoff,
 Harborview quoted, Linden Row paid), 18 takeoff lines, 2 quotes, 1 paid invoice, 5 expenses.
+
+## Landing design variants
+`/` = variant 1 (hero readout mock, ROI calculator, scan demo, testimonials, FAQ, cost math and
+competitor panel). `/v2` = variant 2 (editorial type-led hero, numbered rail, pricing MATRIX,
+single-field demo capture). Both read the same /api/billing endpoints; pick one and delete the
+other when decided.

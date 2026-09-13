@@ -7,7 +7,7 @@ import {
   Lock, ServerCog, EyeOff, Quote as QuoteIcon,
 } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
-import type { Lead, Plan } from "@/lib/types";
+import type { CostModel, Lead, PlanTier } from "@/lib/types";
 import { money } from "@/lib/types";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,13 +17,7 @@ import { Logo } from "@/components/Shell";
 import ScanSequence from "@/components/ScanSequence";
 import { cn } from "@/lib/utils";
 
-const FALLBACK_PLANS: Plan[] = [
-  { id: "single", name: "Single Job", price: 39, monthly_price: 0, cadence: "per takeoff", kind: "one_time", seats: "1 seat", badge: "", blurb: "For the contractor bidding the occasional job.", features: ["One blueprint set", "Full flooring logic", "One quote + one invoice", "No subscription"], highlight: false },
-  { id: "five", name: "Five Pack", price: 99, monthly_price: 0, cadence: "one-time", kind: "one_time", seats: "1 seat", badge: "Best value per job", blurb: "Five jobs, one price.", features: ["Up to 5 takeoffs", "Quotes + invoicing", "Change orders", "Expense log"], highlight: false },
-  { id: "pro", name: "Unlimited Pro", price: 249, monthly_price: 311, cadence: "per month", kind: "subscription", seats: "2 seats included", badge: "Most popular", blurb: "Ongoing commercial and multi-family work.", features: ["Unlimited uploads", "Change orders", "Bid vs actual costing", "Branded PDFs"], highlight: true },
-  { id: "agency", name: "Agency", price: 999, monthly_price: 1249, cadence: "per month", kind: "subscription", seats: "10 seats included", badge: "Multi-seat", blurb: "Several estimators bidding at once.", features: ["Everything in Pro", "10 seats with roles", "Shared template library", "CSV export"], highlight: false },
-  { id: "enterprise", name: "Enterprise", price: 0, monthly_price: 0, cadence: "custom quote", kind: "contact", seats: "Unlimited seats", badge: "Talk to us", blurb: "Regional and national subcontractors.", features: ["Unlimited seats", "Custom cost books", "SSO + API", "SLA support"], highlight: false },
-];
+const FALLBACK_PLANS: PlanTier[] = [];
 
 function useCountUp(target: number, run: boolean) {
   const [v, setV] = useState(0);
@@ -130,7 +124,7 @@ function RoiCalculator() {
   const [rate, setRate] = useState(65);
   const hoursSaved = Math.round(bids * hours * 0.8);
   const monthlySaving = hoursSaved * rate;
-  const net = monthlySaving - 249;
+  const net = monthlySaving - 199;
 
   return (
     <div className="grid gap-px border border-slate-800/80 bg-slate-800/60 lg:grid-cols-[1fr_0.9fr]" data-testid="roi-calculator">
@@ -163,7 +157,7 @@ function RoiCalculator() {
         <div className="mt-6 font-mono text-[11px] uppercase tracking-[0.2em] text-slate-500">That time is worth</div>
         <div className="mt-1 font-mono text-3xl font-semibold text-white" data-testid="roi-value-saved">{money(monthlySaving)}</div>
         <div className="mt-6 border-t border-slate-800 pt-5">
-          <div className="font-mono text-[11px] uppercase tracking-[0.2em] text-slate-500">Net of Unlimited Pro at $249/mo</div>
+          <div className="font-mono text-[11px] uppercase tracking-[0.2em] text-slate-500">Net of Crew at $199/mo</div>
           <div className={cn("mt-1 font-mono text-3xl font-semibold", net >= 0 ? "text-[#E2F952]" : "text-red-400")} data-testid="roi-net">
             {money(net)}
           </div>
@@ -234,8 +228,10 @@ function ContactForm() {
 }
 
 export default function Landing() {
-  const { data } = useQuery<Plan[]>({ queryKey: ["plans"], queryFn: () => apiGet<Plan[]>("/billing/plans"), retry: false });
+  const { data } = useQuery<PlanTier[]>({ queryKey: ["plans"], queryFn: () => apiGet<PlanTier[]>("/billing/plans"), retry: false });
+  const costs = useQuery<CostModel>({ queryKey: ["cost-model"], queryFn: () => apiGet<CostModel>("/billing/cost-model"), retry: false });
   const plans = data ?? FALLBACK_PLANS;
+  const cost = costs.data;
   const [annual, setAnnual] = useState(true);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const demo = useInView<HTMLDivElement>(0.3);
@@ -471,6 +467,18 @@ export default function Landing() {
                   )}
                   <p className="mt-3 text-[15px] text-slate-400">{p.blurb}</p>
                   <p className="mt-2 font-mono text-xs uppercase tracking-widest text-[#E2F952]">{p.seats}</p>
+                  <div className="mt-4 grid grid-cols-2 gap-3 border-y border-slate-800 py-4 font-mono text-sm">
+                    <div>
+                      <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Blueprint pages</div>
+                      <div className="mt-0.5 text-base font-semibold text-white" data-testid={`plan-${p.id}-pages`}>
+                        {p.pages_included < 0 ? "Pooled volume" : `${p.pages_included}${p.kind === "one_time" ? " total" : " / mo"}`}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Max PDF size</div>
+                      <div className="mt-0.5 text-base font-semibold text-white">{p.max_file_mb} MB</div>
+                    </div>
+                  </div>
                   <ul className="mt-6 flex-1 space-y-3">
                     {p.features.map((f) => (
                       <li key={f} className="flex gap-2.5 text-[15px] text-slate-300">
@@ -490,13 +498,54 @@ export default function Landing() {
                       to="/login?mode=signup" data-testid={`plan-${p.id}-cta`}
                       className={cn(buttonVariants({ variant: p.highlight ? "default" : "outline", size: "lg" }), "mt-8 w-full font-semibold")}
                     >
-                      {sub ? "Start free trial" : "Get started"}
+                      {p.kind === "trial" ? "Start free" : sub ? "Start free trial" : "Buy one takeoff"}
                     </Link>
                   )}
                 </div>
               </Reveal>
             );
           })}
+        </div>
+
+        {/* the pricing math, published */}
+        <div className="mt-14 grid gap-px border border-slate-800/80 bg-slate-800/60 lg:grid-cols-[0.95fr_1.05fr]" data-testid="pricing-math">
+          <div className="bg-[#0F1722] p-7">
+            <p className="font-mono text-xs uppercase tracking-[0.2em] text-[#E2F952]">Why it costs what it costs</p>
+            <h3 className="mt-3 font-heading text-2xl font-bold text-slate-100">
+              {cost ? `$${cost.page_cost.toFixed(3)}` : "$0.115"} of AI per blueprint page
+            </h3>
+            <div className="mt-5 space-y-3">
+              {(cost?.breakdown ?? []).map((b) => (
+                <div key={b.item} className="flex items-start justify-between gap-4 border-b border-slate-800/60 pb-3">
+                  <div>
+                    <div className="text-[15px] text-slate-200">{b.item}</div>
+                    <div className="font-mono text-xs text-slate-500">{b.detail}</div>
+                  </div>
+                  <span className="shrink-0 font-mono text-base font-semibold text-white">${b.cost.toFixed(3)}</span>
+                </div>
+              ))}
+            </div>
+            <p className="mt-5 text-[15px] leading-relaxed text-slate-400">
+              Claude Opus reads every page at 200 DPI — accuracy over speed. Each tier gives you roughly
+              two pages per dollar, and past your allowance it is {cost ? `$${cost.overage_per_page.toFixed(2)}` : "$0.50"} a
+              page instead of a hard stop. Quotes, invoicing and payments start at Crew; the $49 one-off is
+              takeoff and PDF only.
+            </p>
+          </div>
+          <div className="bg-[#131D2A] p-7">
+            <p className="font-mono text-xs uppercase tracking-[0.2em] text-slate-500">What the trade pays elsewhere</p>
+            <div className="mt-5 space-y-4" data-testid="pricing-competitors">
+              {(cost?.competitors ?? []).map((c) => (
+                <div key={c.name} className="border-b border-slate-800/60 pb-4 last:border-0">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <span className="font-heading text-lg font-semibold text-slate-100">{c.name}</span>
+                    <span className="font-mono text-sm text-[#E2F952]">{c.price}</span>
+                  </div>
+                  <p className="mt-1 text-[15px] leading-relaxed text-slate-400">{c.note}</p>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </section>
 
@@ -581,6 +630,7 @@ export default function Landing() {
             <a href="#demo" className="hover:text-[#E2F952]">Book a demo</a>
             <Link to="/login" className="hover:text-[#E2F952]">Sign in</Link>
             <Link to="/login?mode=signup" className="hover:text-[#E2F952]">Free trial</Link>
+            <Link to="/v2" data-testid="footer-v2-link" className="hover:text-[#E2F952]">Design v2</Link>
           </div>
         </div>
         <div className="border-t border-slate-800/60 px-5 py-5 text-center font-mono text-xs text-slate-600">
