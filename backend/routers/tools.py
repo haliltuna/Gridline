@@ -96,9 +96,10 @@ async def upload_spec_sheet(job_id: str, file: UploadFile = File(...), user: dic
     if accessories:
         settings = await db.settings.find_one({"user_id": account_id(user)}, {"_id": 0}) or {}
         existing = await db.takeoff_lines.find(
-            {"job_id": job_id, "scope": "accessory"}, {"_id": 0, "room": 1},
+            {"job_id": job_id, "scope": "accessory"}, {"_id": 0, "room": 1, "building": 1, "unit": 1},
         ).to_list(500)
-        have = {str(r.get("room") or "") for r in existing}
+        have = {(str(r.get("building") or ""), str(r.get("unit") or ""), str(r.get("room") or ""))
+                for r in existing}
         acc_products = await db.products.find(
             {"account_id": account_id(user), "kind": "accessory"}, {"_id": 0},
         ).sort("times_used", -1).to_list(200)
@@ -106,6 +107,14 @@ async def upload_spec_sheet(job_id: str, file: UploadFile = File(...), user: dic
         for prod in acc_products:
             catalogue.setdefault(str(prod.get("accessory_kind") or ""), prod)
         spec_rows = {str(a.get("kind")): a for a in accessories}
+        measured = await db.takeoff_lines.find(
+            {"job_id": job_id, "scope": {"$ne": "accessory"}},
+            {"_id": 0, "building": 1, "unit": 1, "sqft": 1},
+        ).to_list(2000)
+        weights: dict[tuple[str, str], float] = {}
+        for m in measured:
+            key = (str(m.get("building") or ""), str(m.get("unit") or ""))
+            weights[key] = weights.get(key, 0.0) + float(m.get("sqft") or 0)
         candidates = build_accessory_lines(
             {"accessories": [{"building": "Building A", "unit": "Whole job"}]}, job_id,
             float(settings.get("labor_rate", 58.0)),
@@ -114,8 +123,9 @@ async def upload_spec_sheet(job_id: str, file: UploadFile = File(...), user: dic
              "nosing": float(settings.get("acc_nosing_price") or 0),
              "cove_base": float(settings.get("acc_cove_base_price") or 0)},
             catalogue=catalogue, spec_rows=spec_rows,
+            unit_weights=[(b, u, sq) for (b, u), sq in weights.items()],
         )
-        fresh = [c for c in candidates if c["room"] not in have]
+        fresh = [c for c in candidates if (c["building"], c["unit"], c["room"]) not in have]
         if fresh:
             await db.takeoff_lines.insert_many([dict(c) for c in fresh])
             added_acc = len(fresh)

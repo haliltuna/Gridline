@@ -3,11 +3,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Send, CreditCard, FileText, Download, Sliders, Eye } from "lucide-react";
 import { apiGet, apiPatch, apiPost } from "@/lib/api";
-import type { Invoice, SendOut, TakeoffLine } from "@/lib/types";
+import type { Invoice, ReferenceOptions, SendOut, TakeoffLine } from "@/lib/types";
 import { money } from "@/lib/types";
 import Shell, { Panel, StatusBadge } from "@/components/Shell";
 import DocLineEditor, { type DocLinePatch } from "@/components/DocLineEditor";
 import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 export default function Invoices() {
@@ -32,6 +35,13 @@ export default function Invoices() {
   const [openLines, setOpenLines] = useState<string | null>(null);
   // Inline PDF preview — see exactly what the client gets before hitting Email.
   const [previewId, setPreviewId] = useState<string | null>(null);
+  // Letterhead switched straight from the preview.
+  const [template, setTemplate] = useState("contractor_clean");
+  const refOpts = useQuery<ReferenceOptions>({
+    queryKey: ["reference-options"],
+    queryFn: () => apiGet<ReferenceOptions>("/reference/options"),
+    retry: false,
+  });
   const editLine = useMutation({
     mutationFn: ({ id, lineId, patch }: { id: string; lineId: string; patch: DocLinePatch }) =>
       apiPatch<Invoice>(`/invoices/${id}/lines/${lineId}`, patch),
@@ -105,20 +115,34 @@ export default function Invoices() {
               <div className="w-full" data-testid={`invoice-preview-panel-${inv.id}`}>
                 <div className="flex flex-wrap items-center justify-between gap-3 border border-hairline bg-surface-2 px-4 py-3">
                   <p className="text-[15px] text-ink-3">
-                    This is exactly what the client receives. Edit the lines above and the preview
-                    re-renders before you email it.
+                    This is exactly what the client receives. Switch letterhead or edit the lines
+                    above and the preview re-renders before you email it.
                   </p>
-                  <a href={`/api/invoices/${inv.id}/pdf`} target="_blank" rel="noreferrer"
-                     data-testid={`invoice-pdf-download-${inv.id}`}
-                     className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-2")}>
-                    <Download className="h-3.5 w-3.5" /> Open / download
-                  </a>
+                  <div className="flex items-center gap-2">
+                    <Select value={template} onValueChange={(v: string) => setTemplate(v)}>
+                      <SelectTrigger className="h-9 w-[190px]" data-testid={`invoice-preview-template-${inv.id}`}>
+                        <SelectValue>
+                          {(refOpts.data?.pdf_templates ?? []).find((t) => t.id === template)?.label ?? "Letterhead"}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(refOpts.data?.pdf_templates ?? []).map((t) => (
+                          <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <a href={`/api/invoices/${inv.id}/pdf?template=${template}`} target="_blank" rel="noreferrer"
+                       data-testid={`invoice-pdf-download-${inv.id}`}
+                       className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-2")}>
+                      <Download className="h-3.5 w-3.5" /> Open / download
+                    </a>
+                  </div>
                 </div>
                 <iframe
-                  key={`${inv.id}-${inv.total}-${inv.lines.length}`}
+                  key={`${inv.id}-${inv.total}-${inv.lines.length}-${template}`}
                   title={`${inv.number} preview`}
                   data-testid={`invoice-pdf-frame-${inv.id}`}
-                  src={`/api/invoices/${inv.id}/pdf#toolbar=0&view=FitH`}
+                  src={`/api/invoices/${inv.id}/pdf?template=${template}#toolbar=0&view=FitH`}
                   className="h-[620px] w-full border border-t-0 border-hairline bg-white"
                 />
               </div>

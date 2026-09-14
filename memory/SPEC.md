@@ -282,3 +282,18 @@ Test guidance: /app/auth_testing.md (seed a sessions row; OAuth itself is not sc
 - Takeoff quote cards gained `Preview PDF` — the real quote PDF inline in an iframe (keyed on total
   and line count so it re-renders after a line edit) plus an open/download link, gated on the `pdf`
   capability exactly like the existing PDF link. Same pattern as the Invoices page preview.
+
+## Per-unit trim + in-preview letterhead switch (latest)
+- `build_accessory_lines(..., unit_weights=[(building, unit, sqft)])`: a single whole-job trim total
+  is now split into one line per unit, weighted by that unit's measured floor area. Linear-foot
+  items (cove base, tile edge profiles) split proportionally; counted items (doors → transitions,
+  steps → nosings) use largest-remainder allocation so the per-unit lines add up to exactly what
+  was counted. Each line's `source` states the share ("… · 50% of the job total by floor area").
+  Jobs with one measured unit keep the single whole-job line. Spec-sheet quantities follow the same
+  split. Wired from `routers/jobs.py` (blueprint upload) and `routers/tools.py` (spec upload, which
+  now dedupes on building+unit+room).
+- Quote and invoice PDF previews carry their own letterhead Select (options from
+  `GET /api/reference/options` → `pdf_templates`: contractor_clean, technical_readout,
+  classic_professional). Switching re-keys the iframe so the client-facing PDF re-renders in place;
+  the open/download link uses the same template. Takeoff's page-level template select still drives
+  the takeoff PDF.

@@ -185,12 +185,20 @@ async def upload_blueprint(job_id: str, file: UploadFile = File(...), user: dict
     for prod in acc_products:
         catalogue.setdefault(str(prod.get("accessory_kind") or ""), prod)
     spec_rows = {str(a.get("kind")): a for a in (job.get("spec_accessories") or []) if isinstance(a, dict)}
+    # Trim is priced against the unit it belongs to: a whole-job total is split per unit by
+    # measured floor area rather than landing as one lump line.
+    weights: dict[tuple[str, str], float] = {}
+    for line in lines:
+        if str(line.get("scope")) != "accessory":
+            key = (str(line.get("building") or ""), str(line.get("unit") or ""))
+            weights[key] = weights.get(key, 0.0) + float(line.get("sqft") or 0)
     lines += build_accessory_lines(result, job_id, labor_rate, {
         "transition": float(settings.get("acc_transition_price") or 0),
         "tile_profile": float(settings.get("acc_tile_profile_price") or 0),
         "nosing": float(settings.get("acc_nosing_price") or 0),
         "cove_base": float(settings.get("acc_cove_base_price") or 0),
-    }, catalogue=catalogue, spec_rows=spec_rows)
+    }, catalogue=catalogue, spec_rows=spec_rows,
+        unit_weights=[(b, u, sq) for (b, u), sq in weights.items()])
     if lines:
         await db.takeoff_lines.insert_many([dict(line) for line in lines])
 

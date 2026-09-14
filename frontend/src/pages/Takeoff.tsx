@@ -825,17 +825,32 @@ export default function Takeoff() {
                   <div className="w-full" data-testid={`quote-preview-panel-${q.id}`}>
                     <div className="flex flex-wrap items-center justify-between gap-3 border border-hairline bg-surface-2 px-4 py-3">
                       <p className="text-[15px] text-ink-3">
-                        Exactly what the client receives. Edit the lines and the preview re-renders
-                        before you email it.
+                        Exactly what the client receives. Switch letterhead or edit the lines and the
+                        preview re-renders before you email it.
                       </p>
-                      <a href={pdfUrl(`/quotes/${q.id}/pdf`)} target="_blank" rel="noreferrer"
-                         data-testid={`quote-pdf-download-${q.id}`}
-                         className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-2")}>
-                        <FileDown className="h-3.5 w-3.5" /> Open / download
-                      </a>
+                      <div className="flex items-center gap-2">
+                        <Select value={pdfTemplate} onValueChange={(v: string) => setPdfTemplate(v)}>
+                          <SelectTrigger className="h-9 w-[190px]" data-testid={`quote-preview-template-${q.id}`}>
+                            <SelectValue>
+                              {(refOpts.data?.pdf_templates ?? PDF_TEMPLATES).find((t) => t.id === pdfTemplate)?.label
+                                ?? "Letterhead"}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(refOpts.data?.pdf_templates ?? PDF_TEMPLATES).map((t) => (
+                              <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <a href={pdfUrl(`/quotes/${q.id}/pdf`)} target="_blank" rel="noreferrer"
+                           data-testid={`quote-pdf-download-${q.id}`}
+                           className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-2")}>
+                          <FileDown className="h-3.5 w-3.5" /> Open / download
+                        </a>
+                      </div>
                     </div>
                     <iframe
-                      key={`${q.id}-${q.total}-${q.lines.length}`}
+                      key={`${q.id}-${q.total}-${q.lines.length}-${pdfTemplate}`}
                       title={`Quote ${q.revision} preview`}
                       data-testid={`quote-pdf-frame-${q.id}`}
                       src={`${pdfUrl(`/quotes/${q.id}/pdf`)}#toolbar=0&view=FitH`}

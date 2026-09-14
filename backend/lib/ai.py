@@ -463,7 +463,9 @@ def line_cost(line: dict[str, Any]) -> float:
 def build_accessory_lines(parsed: dict[str, Any], job_id: str, labor_rate: float,
                           prices: dict[str, float] | None = None,
                           catalogue: dict[str, dict[str, Any]] | None = None,
-                          spec_rows: dict[str, dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+                          spec_rows: dict[str, dict[str, Any]] | None = None,
+                          unit_weights: list[tuple[str, str, float]] | None = None,
+                          ) -> list[dict[str, Any]]:
     """Turn the AI's door, step, wall-base and tile-profile counts into priced accessory lines.
 
     `prices` is the account's own accessory pricing (settings) keyed by kind; anything missing
@@ -471,7 +473,10 @@ def build_accessory_lines(parsed: dict[str, Any], job_id: str, labor_rate: float
     accessory product per kind (name, unit_price, labor_hr_each) — a saved product wins, so the
     trim lands on the takeoff already named the way this contractor buys it. `spec_rows` are the
     trim schedule rows read off the spec sheet, used as the quantity when the drawings counted
-    nothing and always as the product name.
+    nothing and always as the product name. `unit_weights` is [(building, unit, sqft)] from the
+    measured lines: a whole-job total (cove base, tile profiles, doors, steps) is then split out
+    per unit in proportion to that unit's floor area instead of landing as one lump line, so the
+    client sees the trim priced against the unit it belongs to.
     """
     groups = parsed.get("accessories") or []
     if not groups:
@@ -485,6 +490,36 @@ def build_accessory_lines(parsed: dict[str, Any], job_id: str, labor_rate: float
     # Spec-sheet quantities only stand in when there is a single whole-job group; per-unit
     # groups are trusted as-is so a schedule total is never double-counted.
     single_group = len(groups) == 1
+    # A single whole-job group becomes one group per unit, weighted by measured floor area.
+    weights = [w for w in (unit_weights or []) if float(w[2]) > 0]
+    if single_group and len(weights) > 1:
+        total_sqft = sum(float(w[2]) for w in weights)
+        g0 = groups[0]
+        spread: list[dict[str, Any]] = []
+        for building, unit, sqft in weights:
+            share = float(sqft) / total_sqft
+            row: dict[str, Any] = {"building": building, "unit": unit, "share": share,
+                                   "note": g0.get("note")}
+            for key in ("cove_base_lf", "tile_profile_lf"):
+                row[key] = float(g0.get(key) or 0) * share
+            spread.append(row)
+        # Counted items are whole pieces: allocate by largest remainder so the per-unit lines
+        # still add up to exactly what was counted on the drawings.
+        for key in ("doors", "steps"):
+            total = int(round(float(g0.get(key) or 0)))
+            if total <= 0:
+                for row in spread:
+                    row[key] = 0
+                continue
+            raw = [total * float(r["share"]) for r in spread]
+            base = [int(x) for x in raw]
+            left = total - sum(base)
+            order = sorted(range(len(spread)), key=lambda i: raw[i] - base[i], reverse=True)
+            for i in order[:left]:
+                base[i] += 1
+            for row, n in zip(spread, base):
+                row[key] = n
+        groups = spread
     out: list[dict[str, Any]] = []
     for g in groups:
         if not isinstance(g, dict):
@@ -496,7 +531,11 @@ def build_accessory_lines(parsed: dict[str, Any], job_id: str, labor_rate: float
             spec = (spec_rows or {}).get(kind) or {}
             qty = float(g.get(key) or 0)
             counted = qty > 0
-            if not counted and single_group:
+            share = float(g.get("share") or 0)
+            if not counted and single_group and share > 0:
+                # whole-job group was spread per unit: the spec total follows the same split
+                qty = float(spec.get("qty") or 0) * share
+            elif not counted and single_group:
                 # Nothing on the drawings for this trim, but the finish schedule printed a
                 # quantity — quote it rather than dropping the scope.
                 qty = float(spec.get("qty") or 0)
@@ -508,9 +547,15 @@ def build_accessory_lines(parsed: dict[str, Any], job_id: str, labor_rate: float
                 or float((prices or {}).get(kind) or 0) or float(d["unit_price"])
             hr_each = float(saved.get("labor_hr_each") or d["labor_hr_each"])
             product = str(saved.get("name") or spec.get("product") or "")
+            if key in ("doors", "steps"):
+                qty = float(round(qty))          # you cannot install half a nosing
+                if qty <= 0:
+                    continue
             where = (f"counted from the drawings ({qty:,.0f} {d['unit']}"
                      + ("" if d["unit"] == "lf" else "s") + ")") if counted \
                 else f"read from the spec sheet ({qty:,.0f} {d['unit']})"
+            if share > 0:
+                where += f" · {share * 100:,.0f}% of the job total by floor area"
             out.append(build_line({
                 "building": g.get("building") or "Building A",
                 "unit": g.get("unit") or "Main",
