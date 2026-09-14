@@ -18,6 +18,8 @@ import LandingV2 from "@/pages/LandingV2";
 import PaymentResult from "@/pages/PaymentResult";
 import Products from "@/pages/Products";
 import Approve from "@/pages/Approve";
+import NotFoundPage from "@/pages/NotFoundPage";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 // One <Route> per page in src/pages; BrowserRouter already wraps this in main.tsx.
 export default function App() {
@@ -26,7 +28,7 @@ export default function App() {
   const location = useLocation();
   if (location.hash.includes("session_id=")) return <AuthCallback />;
   return (
-    <>
+    <ErrorBoundary>
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
@@ -48,9 +50,9 @@ export default function App() {
         <Route path="/pay/:payToken" element={<Pay />} />
         <Route path="/products" element={<Products />} />
         <Route path="/approve/:token" element={<Approve />} />
-        <Route path="*" element={<Landing />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
       <Toaster richColors />
-    </>
+    </ErrorBoundary>
   );
 }
