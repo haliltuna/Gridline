@@ -93,6 +93,23 @@ ACCESSORIES: dict[str, dict] = {
     "nosing": {"label": "Stair nosings (steps)", "unit": "step",
                "unit_price": 42.0, "labor_hr_each": 0.45},
     "cove_base": {"label": "Cove base", "unit": "lf", "unit_price": 3.4, "labor_hr_each": 0.02},
+    # Tile edge profile / trim (Schluter-style) wherever tile meets another finish or turns a corner.
+    "tile_profile": {"label": "Tile edge profile / trim", "unit": "lf",
+                     "unit_price": 9.5, "labor_hr_each": 0.06},
+}
+
+ACCESSORY_KINDS = list(ACCESSORIES)
+
+# Which AI count feeds which accessory, and the settings key holding the account's own price.
+ACCESSORY_SOURCES: dict[str, dict] = {
+    "transition": {"count_field": "doors", "price_key": "acc_transition_price",
+                   "room": "Transition strips — door openings"},
+    "nosing": {"count_field": "steps", "price_key": "acc_nosing_price",
+               "room": "Stair nosings — steps"},
+    "cove_base": {"count_field": "cove_base_lf", "price_key": "acc_cove_base_price",
+                  "room": "Cove base — wall linear feet"},
+    "tile_profile": {"count_field": "tile_profile_lf", "price_key": "acc_tile_profile_price",
+                     "room": "Tile edge profiles — linear feet"},
 }
 
 

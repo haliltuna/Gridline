@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Send, CreditCard, FileText, Download, Sliders } from "lucide-react";
+import { Send, CreditCard, FileText, Download, Sliders, Eye } from "lucide-react";
 import { apiGet, apiPatch, apiPost } from "@/lib/api";
 import type { Invoice, SendOut, TakeoffLine } from "@/lib/types";
 import { money } from "@/lib/types";
@@ -30,6 +30,8 @@ export default function Invoices() {
 
   // Retyping a product name or price on an invoice that is already out the door.
   const [openLines, setOpenLines] = useState<string | null>(null);
+  // Inline PDF preview — see exactly what the client gets before hitting Email.
+  const [previewId, setPreviewId] = useState<string | null>(null);
   const editLine = useMutation({
     mutationFn: ({ id, lineId, patch }: { id: string; lineId: string; patch: DocLinePatch }) =>
       apiPatch<Invoice>(`/invoices/${id}/lines/${lineId}`, patch),
@@ -94,7 +96,33 @@ export default function Invoices() {
                       onClick={() => setOpenLines(openLines === inv.id ? null : inv.id)}>
                 <Sliders className="h-4 w-4" /> {openLines === inv.id ? "Close lines" : "Edit lines"}
               </Button>
+              <Button variant="ghost" data-testid={`invoice-preview-${inv.id}`}
+                      onClick={() => setPreviewId(previewId === inv.id ? null : inv.id)}>
+                <Eye className="h-4 w-4" /> {previewId === inv.id ? "Hide PDF" : "Preview PDF"}
+              </Button>
             </div>
+            {previewId === inv.id && (
+              <div className="w-full" data-testid={`invoice-preview-panel-${inv.id}`}>
+                <div className="flex flex-wrap items-center justify-between gap-3 border border-hairline bg-surface-2 px-4 py-3">
+                  <p className="text-[15px] text-ink-3">
+                    This is exactly what the client receives. Edit the lines above and the preview
+                    re-renders before you email it.
+                  </p>
+                  <a href={`/api/invoices/${inv.id}/pdf`} target="_blank" rel="noreferrer"
+                     data-testid={`invoice-pdf-download-${inv.id}`}
+                     className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-2")}>
+                    <Download className="h-3.5 w-3.5" /> Open / download
+                  </a>
+                </div>
+                <iframe
+                  key={`${inv.id}-${inv.total}-${inv.lines.length}`}
+                  title={`${inv.number} preview`}
+                  data-testid={`invoice-pdf-frame-${inv.id}`}
+                  src={`/api/invoices/${inv.id}/pdf#toolbar=0&view=FitH`}
+                  className="h-[620px] w-full border border-t-0 border-hairline bg-white"
+                />
+              </div>
+            )}
             {openLines === inv.id && (
               <div className="w-full">
                 <DocLineEditor

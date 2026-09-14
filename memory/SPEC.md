@@ -238,3 +238,33 @@ Test guidance: /app/auth_testing.md (seed a sessions row; OAuth itself is not sc
   revision dialog.
 - EMAIL DELIVERY IS BLOCKED: backend/.env has no `RESEND_API_KEY`/`SENDER_EMAIL`, so mailer.send()
   composes the message and returns delivered=false. Add the key + `resend>=2.0.0` to deliver.
+
+## Accessory catalogue, invoice preview, closing-fee payment, usage alerts (latest)
+- **Accessory catalogue** lives on the Products page behind a `Floor products | Accessory catalogue`
+  tab (`GET /api/products?kind=accessory|floor`). Products gained `kind`, `accessory_kind`,
+  `unit` (sf|lf|ea), `unit_price`, `labor_hr_each`; prices are editable inline. Built-in kinds are
+  `transition`, `nosing`, `cove_base`, `tile_profile` (`lib/flooring.ACCESSORIES` /
+  `ACCESSORY_SOURCES`), each mapped to the AI count field and the Settings price key.
+- `GET /api/accessory-catalogue` = built-in kinds + this account's price.
+  `GET /api/jobs/{id}/accessory-counts` = what the AI counted on the drawings (`doors`, `steps`,
+  `cove_base_lf`, new `tile_profile_lf`) and what the spec sheet's trim schedules gave
+  (`job.spec_accessories`), with the source labelled. `POST /api/products/{id}/add-line` drops any
+  catalogue item onto a job's takeoff as its own line (accessory = qty x unit price + install hrs).
+- **AI reading**: the blueprint prompt now also counts `tile_profile_lf` (tile edge profile / trim),
+  and the spec-sheet prompt returns an `accessories[]` array (kind, qty, unit, product, unit_price)
+  read from wall-base / nosing / transition / tile-profile schedules — stored on the job and
+  returned in `SpecReadResult.accessories`.
+- **Invoices page**: `Preview PDF` renders the real invoice PDF inline in an iframe (keyed on total
+  and line count so it re-renders after an edit) next to the existing `Edit lines` editor, plus an
+  open/download link. Edit → preview → Email is the intended order.
+- **Closing fee via Stripe**: `POST /api/payments/exit-fee/checkout` opens a one-off Checkout for the
+  outstanding `exit_invoices` row; `_fulfil` (kind `exit_fee`) marks it paid and clears
+  `plan_exit_fee`. `GET /api/billing/exit-fee` drives the amber Pay-and-close panel on Billing.
+- **Downgrade warnings**: `GET /api/billing/downgrade-impact?plan_id=` lists lost capabilities plus
+  counts of open quotes / unpaid invoices / spec-priced jobs. Billing opens a confirm dialog with
+  those warnings before any checkout starts (nothing already created is ever deleted).
+- **80% usage alert**: `lib/usage_alerts.maybe_alert_usage` is called right after a successful
+  blueprint read in `routers/jobs.py`; it emails once per billing period (deduped with
+  `users.page_alert_period`) and is a no-op on unlimited plans. MOCKED to the backend console
+  without `RESEND_API_KEY`.
+- Settings gained `acc_tile_profile_price` (default $9.50/lf).

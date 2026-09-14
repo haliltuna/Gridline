@@ -20,7 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from lib.authz import account_id, require
 from lib.db import db
 from lib.pricing import BY_ID, TOP_UP_BY_ID
-from models.billing import CheckoutIn, CheckoutSession, PaymentStatus
+from models.billing import CheckoutIn, CheckoutSession, ExitFeeCheckoutIn, PaymentStatus
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["payments"])
@@ -54,6 +54,17 @@ async def _fulfil(record: dict) -> None:
                       "plan_started_at": datetime.now(timezone.utc),
                       "plan_pages_used": 0, "plan_jobs_used": 0}},
         )
+    elif kind == "exit_fee":
+        # Closing invoice for leaving an annual commitment early — paid once, then done.
+        await db.exit_invoices.update_one(
+            {"id": record.get("exit_invoice_id"), "status": {"$ne": "paid"}},
+            {"$set": {"status": "paid", "paid_at": datetime.now(timezone.utc),
+                      "payment_ref": record.get("stripe_payment_intent_id") or record["session_id"]}},
+        )
+        await db.users.update_one({"id": record["account_id"]}, {"$set": {
+            "plan_exit_fee": 0.0,
+            "plan_payment_note": "Closing invoice paid — billing is fully stopped.",
+        }})
     elif kind == "invoice":
         now = datetime.now(timezone.utc)
         inv = await db.invoices.find_one({"id": record["invoice_id"]}, {"_id": 0})
@@ -154,6 +165,48 @@ async def create_plan_checkout(body: CheckoutIn, user: dict = Depends(require("b
     })
     return CheckoutSession(checkout_url=session.url or "", session_id=session.id,
                            amount=float(price.unit_amount or 0) / 100.0, mocked=False)
+
+
+# ---------- closing invoice for an early annual cancellation ----------
+@router.post("/payments/exit-fee/checkout", response_model=CheckoutSession)
+async def create_exit_fee_checkout(body: ExitFeeCheckoutIn, user: dict = Depends(require("billing:write"))):
+    """A one-off Stripe Checkout for the single cancellation invoice. No subscription, no renewal."""
+    acct = account_id(user)
+    fee = await db.exit_invoices.find_one({"user_id": acct, "status": "unpaid"}, {"_id": 0},
+                                          sort=[("created_at", -1)])
+    if not fee:
+        raise HTTPException(status_code=404, detail="You have no outstanding closing invoice")
+    amount_cents = int(round(float(fee["amount"]) * 100))
+    if amount_cents <= 0:
+        raise HTTPException(status_code=400, detail="That closing invoice has nothing to pay")
+    origin = body.origin_url.rstrip("/")
+    session = stripe.checkout.Session.create(
+        mode="payment",
+        managed_payments={"enabled": False},
+        line_items=[{
+            "quantity": 1,
+            "price_data": {
+                "currency": "usd", "unit_amount": amount_cents,
+                "product_data": {
+                    "name": f"Gridline closing invoice — {fee.get('plan_name') or fee.get('plan_id')}",
+                    "description": (f"Annual/monthly difference for {fee.get('months_billed', 0)} month(s) "
+                                    f"already billed. Billing is stopped; nothing further is charged."),
+                },
+            },
+        }],
+        success_url=f"{origin}/payment/success?session_id={{CHECKOUT_SESSION_ID}}",
+        cancel_url=f"{origin}/payment/cancel",
+        metadata={"kind": "exit_fee", "exit_invoice_id": fee["id"], "account_id": acct},
+    )
+    await db.payment_transactions.insert_one({
+        "session_id": session.id, "kind": "exit_fee", "plan_id": fee.get("plan_id"), "period": "",
+        "account_id": acct, "invoice_id": None, "exit_invoice_id": fee["id"],
+        "amount": float(fee["amount"]), "currency": "usd",
+        "status": "initiated", "payment_status": "pending",
+        "created_at": datetime.now(timezone.utc), "updated_at": datetime.now(timezone.utc),
+    })
+    return CheckoutSession(checkout_url=session.url or "", session_id=session.id,
+                           amount=float(fee["amount"]), mocked=False)
 
 
 # ---------- client invoice payment (public: the pay token is the credential) ----------

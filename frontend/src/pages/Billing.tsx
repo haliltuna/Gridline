@@ -1,12 +1,13 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Check, CreditCard, Gauge, ExternalLink } from "lucide-react";
+import { Check, CreditCard, Gauge, ExternalLink, AlertTriangle } from "lucide-react";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
-import type { BillingTerms, CancelOut, CancelPreview, CheckoutOut, CheckoutSession, CostModel, PlanTier, TopUpPack, Usage, User } from "@/lib/types";
+import type { BillingTerms, CancelOut, CancelPreview, CheckoutOut, CheckoutSession, CostModel, DowngradeImpact, ExitFee, PlanTier, TopUpPack, Usage, User } from "@/lib/types";
 import { money } from "@/lib/types";
 import Shell, { Panel } from "@/components/Shell";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 const pct = (used: number, included: number) =>
@@ -34,6 +35,25 @@ export default function Billing() {
       const detail = e instanceof ApiError ? (e.body as { detail?: string })?.detail : null;
       toast.error(detail ?? "Could not cancel the plan");
     },
+  });
+
+  const exitFee = useQuery<ExitFee>({ queryKey: ["exit-fee"], queryFn: () => apiGet<ExitFee>("/billing/exit-fee"), retry: false });
+  const payExitFee = useMutation({
+    mutationFn: () => apiPost<CheckoutSession>("/payments/exit-fee/checkout", { origin_url: window.location.origin }),
+    onSuccess: (s) => { window.location.href = s.checkout_url; },
+    onError: (e) => {
+      const detail = e instanceof ApiError ? (e.body as { detail?: string })?.detail : null;
+      toast.error(detail ?? "Could not start the closing-invoice checkout");
+    },
+  });
+
+  // Downgrade guard: before any checkout we ask the server what this plan switches off.
+  const [pendingPlan, setPendingPlan] = useState<string | null>(null);
+  const impact = useQuery<DowngradeImpact>({
+    queryKey: ["downgrade-impact", pendingPlan],
+    enabled: Boolean(pendingPlan),
+    queryFn: () => apiGet<DowngradeImpact>(`/billing/downgrade-impact?plan_id=${pendingPlan}`),
+    retry: false,
   });
 
   const checkout = useMutation({
@@ -143,6 +163,30 @@ export default function Billing() {
         </Panel>
       </div>
 
+      {exitFee.data?.outstanding && (
+        <Panel className="mt-6 border-amber-500/50" testId="billing-exit-fee">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="max-w-2xl">
+              <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.2em] text-amber-300">
+                <AlertTriangle className="h-3.5 w-3.5" /> Closing invoice outstanding
+              </div>
+              <h2 className="mt-2 font-heading text-xl font-semibold text-ink">
+                {money(exitFee.data.amount)} — {exitFee.data.plan_name || exitFee.data.plan_id} annual commitment
+              </h2>
+              <p className="mt-2 text-[15px] text-ink-3">
+                The annual/monthly difference for the {exitFee.data.months_billed} month(s) already billed.
+                This is the only charge left — nothing is billed for the remaining months, and your job
+                history stays exportable either way.
+              </p>
+            </div>
+            <Button size="lg" className="font-semibold" data-testid="exit-fee-pay-button"
+                    disabled={payExitFee.isPending} onClick={() => payExitFee.mutate()}>
+              <CreditCard className="h-4 w-4" /> Pay {money(exitFee.data.amount)} & close
+            </Button>
+          </div>
+        </Panel>
+      )}
+
       <div className="mt-10 flex flex-wrap items-center justify-between gap-4">
         <h2 className="font-heading text-2xl font-semibold text-ink">Plans</h2>
         <div className="inline-flex items-center gap-1 border border-hairline bg-surface p-1" data-testid="billing-toggle">
@@ -229,7 +273,7 @@ export default function Billing() {
                 <Button
                   size="lg" variant={p.highlight ? "default" : "outline"} className="mt-8 w-full font-semibold"
                   data-testid={`billing-select-${p.id}`} disabled={checkout.isPending}
-                  onClick={() => checkout.mutate(p.id)}
+                  onClick={() => setPendingPlan(p.id)}
                 >
                   <CreditCard className="h-4 w-4" />
                   {current === p.id ? "Renew / change billing" : `Pay with card`}
@@ -328,6 +372,46 @@ export default function Billing() {
           </table>
         </div>
       </Panel>
+
+      <Dialog open={Boolean(pendingPlan)} onOpenChange={(o) => { if (!o) setPendingPlan(null); }}>
+        <DialogContent data-testid="downgrade-dialog">
+          <DialogHeader>
+            <DialogTitle>
+              {impact.data?.is_downgrade
+                ? `Heads up — ${impact.data.to_plan} switches features off`
+                : `Switch to ${impact.data?.to_plan ?? "this plan"}`}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-[15px] text-ink-2" data-testid="downgrade-message">
+            {impact.isLoading ? "Checking what this changes…" : impact.data?.message}
+          </p>
+          {(impact.data?.warnings.length ?? 0) > 0 && (
+            <ul className="mt-3 space-y-2" data-testid="downgrade-warnings">
+              {impact.data?.warnings.map((w) => (
+                <li key={w} className="flex gap-2.5 border-l-2 border-amber-400/60 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{w}
+                </li>
+              ))}
+            </ul>
+          )}
+          {(impact.data?.lost_capabilities.length ?? 0) > 0 && (
+            <div className="mt-3 font-mono text-xs text-ink-3" data-testid="downgrade-lost-caps">
+              Switching off: {impact.data?.lost_capabilities.join(" · ")}
+            </div>
+          )}
+          <div className="mt-5 flex flex-wrap justify-end gap-2">
+            <Button variant="ghost" data-testid="downgrade-cancel" onClick={() => setPendingPlan(null)}>
+              Keep my current plan
+            </Button>
+            <Button
+              className="font-semibold" data-testid="downgrade-confirm" disabled={checkout.isPending}
+              onClick={() => { const id = pendingPlan; setPendingPlan(null); if (id) checkout.mutate(id); }}
+            >
+              <CreditCard className="h-4 w-4" /> Continue to checkout
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <p className="mt-8 font-mono text-xs text-ink-4">
         Card payments run on real Stripe Checkout in TEST mode — use 4242 4242 4242 4242, any future expiry, any CVC.

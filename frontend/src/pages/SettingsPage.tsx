@@ -33,12 +33,12 @@ export default function SettingsPage() {
       if (!form) throw new Error("not loaded");
       const {
         country, region, tax_label, tax_rate, currency, labor_rate, company_name, company_email,
-        acc_transition_price, acc_nosing_price, acc_cove_base_price,
+        acc_transition_price, acc_nosing_price, acc_cove_base_price, acc_tile_profile_price,
         business_number, tax_number, waste_overrides,
       } = form;
       return apiPut<SettingsT>("/settings", {
         country, region, tax_label, tax_rate, currency, labor_rate, company_name, company_email,
-        acc_transition_price, acc_nosing_price, acc_cove_base_price,
+        acc_transition_price, acc_nosing_price, acc_cove_base_price, acc_tile_profile_price,
         business_number, tax_number, waste_overrides,
       });
     },
@@ -235,6 +235,7 @@ export default function SettingsPage() {
               ["acc_transition_price", "Transition strip / door", "18.00", "settings-acc-transition-input"],
               ["acc_nosing_price", "Stair nosing / step", "42.00", "settings-acc-nosing-input"],
               ["acc_cove_base_price", "Cove base / linear ft", "3.40", "settings-acc-cove-input"],
+              ["acc_tile_profile_price", "Tile edge profile / linear ft", "9.50", "settings-acc-tile-profile-input"],
             ] as const).map(([key, label, ph, testId]) => (
               <div key={key} className="space-y-2">
                 <Label htmlFor={key} className="text-ink-2">{label}</Label>

@@ -10,6 +10,7 @@ from lib.db import db
 from lib.flooring import adhesive_gallons, defaults_for
 from lib.plan_gate import needs_cap
 from lib.pricing import CAP_EDIT, plan_for
+from lib.usage_alerts import maybe_alert_usage
 from models.billing import PageEstimate
 from models.schemas import Job, JobIn, LineCreate, LineUpdate, TakeoffLine
 
@@ -177,6 +178,7 @@ async def upload_blueprint(job_id: str, file: UploadFile = File(...), user: dict
     # Doors become transition strips, stair treads become nosings — counted, then priced.
     lines += build_accessory_lines(result, job_id, labor_rate, {
         "transition": float(settings.get("acc_transition_price") or 0),
+        "tile_profile": float(settings.get("acc_tile_profile_price") or 0),
         "nosing": float(settings.get("acc_nosing_price") or 0),
         "cove_base": float(settings.get("acc_cove_base_price") or 0),
     })
@@ -200,6 +202,7 @@ async def upload_blueprint(job_id: str, file: UploadFile = File(...), user: dict
         "doors": int(result.get("doors") or sum(int(a.get("doors") or 0) for a in (result.get("accessories") or []) if isinstance(a, dict))),
         "steps": int(result.get("steps") or sum(int(a.get("steps") or 0) for a in (result.get("accessories") or []) if isinstance(a, dict))),
         "cove_base_lf": float(result.get("cove_base_lf") or sum(float(a.get("cove_base_lf") or 0) for a in (result.get("accessories") or []) if isinstance(a, dict))),
+        "tile_profile_lf": float(result.get("tile_profile_lf") or sum(float(a.get("tile_profile_lf") or 0) for a in (result.get("accessories") or []) if isinstance(a, dict))),
         "index_stated": result.get("index_stated") or {},
         "index_variance": index_variance(
             result,
@@ -211,6 +214,7 @@ async def upload_blueprint(job_id: str, file: UploadFile = File(...), user: dict
     }
     await db.jobs.update_one({"id": job_id}, {"$set": update})
     job.update(update)
+    await maybe_alert_usage(account_id(user))
     return Job(**job)
 
 

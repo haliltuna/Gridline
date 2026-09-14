@@ -11,12 +11,13 @@ from lib import mailer
 from lib.ai import apply_specs_to_line, build_line, line_cost, read_spec_sheet
 from lib.authz import account_id, require
 from lib.db import db
-from lib.flooring import FLOOR_TYPE_NAMES, MISC_PRESETS, SCOPES
+from lib.flooring import ACCESSORY_KINDS, FLOOR_TYPE_NAMES, MISC_PRESETS, SCOPES
 from lib.plan_gate import needs_cap
 from lib.pricing import CAP_CHANGE_ORDER, CAP_PDF, CAP_SPEC, CAP_TEMPLATES
 from lib.pdf import change_order_pdf, DEFAULT_TEMPLATE, TEMPLATES, quote_pdf, takeoff_pdf
 from models.schemas import (
     FieldChange,
+    SpecAccessory,
     SendOut,
     SpecPricingIn,
     DiffLine, Job, QuoteDiff, SpecReadResult, TakeoffLine, UnitTemplate,
@@ -75,6 +76,10 @@ async def upload_spec_sheet(job_id: str, file: UploadFile = File(...), user: dic
         raise HTTPException(status_code=400, detail="Spec sheet must be a PDF")
     result = await read_spec_sheet(raw, file.filename or "spec.pdf")
     specs = [s for s in result.get("specs", []) if isinstance(s, dict)]
+    # Accessory / trim schedules read off the same sheet (wall base, nosings, transitions,
+    # tile edge profiles) so the trim work is quoted, not forgotten.
+    accessories = [a for a in (result.get("accessories") or [])
+                   if isinstance(a, dict) and str(a.get("kind") or "") in ACCESSORY_KINDS]
 
     applied = 0
     if specs:
@@ -87,11 +92,13 @@ async def upload_spec_sheet(job_id: str, file: UploadFile = File(...), user: dic
 
     await db.jobs.update_one({"id": job_id}, {"$set": {
         "specs": specs,
+        "spec_accessories": accessories,
         "spec_filename": file.filename or "spec.pdf",
         "spec_brief": result.get("brief") or "",
     }})
     return SpecReadResult(
-        specs=specs, flags=[str(f) for f in result.get("flags", [])], brief=result.get("brief") or "",
+        specs=specs, accessories=[SpecAccessory(**a) for a in accessories],
+        flags=[str(f) for f in result.get("flags", [])], brief=result.get("brief") or "",
         engine=result.get("engine", ""), pages=int(result.get("pages") or 0), applied_to_lines=applied,
     )
 

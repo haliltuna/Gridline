@@ -14,13 +14,13 @@ from lib.db import db
 from lib.flooring import TAX_TABLE, detect_tax
 from lib.pdf import quote_pdf
 from lib.pricing import (
-    BILLING_TERMS, CAP_CHANGE_ORDER, CAP_COSTING, CAP_EXPORT, CAP_INVOICE, CAP_QUOTE, COMPETITORS,
-    COST_BREAKDOWN, OVERAGE_PER_PAGE, PAGE_COST, PLANS as PLAN_DICTS, TARGET_MARGIN,
-    TOP_UPS, early_exit_invoice, has_cap, plan_for, upgrade_message,
+    BILLING_TERMS, CAP_CHANGE_ORDER, CAP_COSTING, CAP_EXPORT, CAP_INVOICE, CAP_QUOTE, CAP_SPEC,
+    COMPETITORS, COST_BREAKDOWN, OVERAGE_PER_PAGE, PAGE_COST, PLANS as PLAN_DICTS, TARGET_MARGIN,
+    TOP_UPS, cap_label, early_exit_invoice, has_cap, plan_for, upgrade_message,
 )
 from models.billing import (
     BillingTerms, CancelOut, CancelPreview, CompetitorRow, CostLine, CostModel, CostingOverview,
-    CostingRow, PlanTier, ThemeIn, TopUpPack, Usage,
+    CostingRow, DowngradeImpact, ExitFee, PlanTier, ThemeIn, TopUpPack, Usage,
 )
 from models.schemas import (
     CheckoutIn, CheckoutOut, DashboardStats, DocLineUpdate, Expense, ExpenseIn, Invoice, JobCosting,
@@ -708,7 +708,8 @@ async def billing_cancel(user: dict = Depends(require("billing:write"))):
     if pre.exit_fee > 0:
         await db.exit_invoices.insert_one({
             "id": str(uuid.uuid4()), "user_id": acct, "plan_id": pre.plan_id,
-            "months_billed": pre.months_billed, "amount": pre.exit_fee,
+            "plan_name": pre.plan_name, "months_billed": pre.months_billed,
+            "amount": pre.exit_fee, "status": "unpaid",
             "created_at": datetime.now(timezone.utc),
         })
     await db.users.update_one({"id": acct}, {"$set": {
@@ -720,8 +721,70 @@ async def billing_cancel(user: dict = Depends(require("billing:write"))):
     }})
     return CancelOut(ok=True, exit_fee=pre.exit_fee, message=(
         f"Billing stopped. One closing invoice of ${pre.exit_fee:,.2f} covers the annual/monthly "
-        f"difference for the {pre.months_billed} month(s) already billed."
+        f"difference for the {pre.months_billed} month(s) already billed — pay it on this page to "
+        f"close the account."
         if pre.exit_fee > 0 else "Billing stopped immediately — no cancellation fee."))
+
+
+@router.get("/billing/exit-fee", response_model=ExitFee)
+async def billing_exit_fee(user: dict = Depends(require("billing:write"))):
+    """The outstanding closing invoice, if the account left an annual commitment early."""
+    doc = await db.exit_invoices.find_one({"user_id": account_id(user), "status": "unpaid"},
+                                         {"_id": 0}, sort=[("created_at", -1)])
+    if not doc:
+        return ExitFee(outstanding=False)
+    return ExitFee(outstanding=True, id=doc["id"], plan_id=doc.get("plan_id", ""),
+                   plan_name=doc.get("plan_name", ""), months_billed=int(doc.get("months_billed") or 0),
+                   amount=float(doc.get("amount") or 0), status=doc.get("status", "unpaid"),
+                   created_at=str(doc.get("created_at") or ""))
+
+
+@router.get("/billing/downgrade-impact", response_model=DowngradeImpact)
+async def billing_downgrade_impact(plan_id: str, user: dict = Depends(require("billing:write"))):
+    """What an account loses by moving to `plan_id` — shown before the checkout is started."""
+    acct = account_id(user)
+    current = plan_for((await _account_doc(user)).get("plan"))
+    target = plan_for(plan_id)
+    lost = [c for c in current["capabilities"] if c not in target["capabilities"]]
+    open_quotes = await db.quotes.count_documents({"user_id": acct, "status": {"$in": ["draft", "sent"]}})
+    unpaid = await db.invoices.count_documents({"user_id": acct, "status": {"$ne": "paid"}})
+    with_specs = await db.jobs.count_documents({"user_id": acct, "specs": {"$exists": True, "$ne": []}})
+
+    warnings: list[str] = []
+    if CAP_INVOICE in lost and unpaid:
+        warnings.append(f"{unpaid} unpaid invoice(s) stay viewable and payable by your client, but you "
+                        f"will not be able to raise or email a NEW invoice on {target['name']}.")
+    elif CAP_INVOICE in lost:
+        warnings.append(f"Invoicing and card collection are not part of {target['name']} — accepted "
+                        f"quotes can no longer be converted into an invoice.")
+    if CAP_SPEC in lost and with_specs:
+        warnings.append(f"{with_specs} job(s) were priced from a spec sheet. Those products stay on the "
+                        f"lines, but spec-sheet reading and automatic product transfer switch off.")
+    elif CAP_SPEC in lost:
+        warnings.append("Spec-sheet reading with automatic product transfer is Unlimited Pro only.")
+    if CAP_QUOTE in lost and open_quotes:
+        warnings.append(f"{open_quotes} open quote(s) stay on record and exportable, but new quotes "
+                        f"cannot be created on {target['name']}.")
+    if CAP_CHANGE_ORDER in lost:
+        warnings.append("Change-order revisions and their diff PDFs switch off.")
+    if CAP_COSTING in lost:
+        warnings.append("Bid vs actual job costing and the expense log switch off.")
+    if CAP_EXPORT in lost:
+        warnings.append("CSV / QuickBooks export switches off.")
+    if target["pages_included"] >= 0 and (current["pages_included"] < 0
+                                          or target["pages_included"] < current["pages_included"]):
+        warnings.append(f"Your page allowance drops to {target['pages_included']} per period.")
+
+    is_down = bool(lost) or (target["pages_included"] >= 0 and current["pages_included"] < 0)
+    return DowngradeImpact(
+        from_plan=current["name"], to_plan=target["name"], is_downgrade=is_down,
+        lost_capabilities=[cap_label(c) for c in lost], warnings=warnings,
+        open_quotes=open_quotes, unpaid_invoices=unpaid, jobs_with_specs=with_specs,
+        message=(f"Moving from {current['name']} to {target['name']} switches features off. Everything "
+                 f"already created stays viewable and exportable — only NEW actions are blocked."
+                 if is_down else
+                 f"{target['name']} keeps everything you have on {current['name']}."),
+    )
 
 
 @router.get("/billing/top-ups", response_model=list[TopUpPack])

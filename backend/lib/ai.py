@@ -41,6 +41,8 @@ Flooring bids are lost on the accessories, so COUNT them as well as measuring ar
  * doors: every door opening / doorway in the scope (each one needs a transition strip)
  * steps: every stair tread / step (each one needs a stair nosing)
  * stair_runs: number of separate stair runs
+ * tile_profile_lf: linear feet of tile edge profile / trim (Schluter-type) — every exposed tile
+   edge, outside corner, threshold or transition where tile meets another finish
  * cove_base_lf: linear feet of wall base / cove base — measure the room perimeter from the
    printed dimensions and SUBTRACT the door openings (about 3 ft each). Only count rooms whose
    finish gets a wall base (typically resilient, VCT and tile rooms, not carpeted bedrooms
@@ -64,8 +66,9 @@ Return STRICT JSON only, no prose, no markdown fence:
                   "total_sqft": <number or null>, "source": "sheet name/number or null"}},
  "doors": <int total door openings>, "steps": <int total stair treads>,
  "cove_base_lf": <number, total linear feet of wall base>,
+ "tile_profile_lf": <number, total linear feet of tile edge profile / trim>,
  "accessories": [{{"building":"Building A","unit":"Unit 101","doors":4,"steps":0,
-                  "cove_base_lf":128.5,"note":null}}],
+                  "cove_base_lf":128.5,"tile_profile_lf":22.0,"note":null}}],
  "cross_check_note": "string or null",
  "flags": ["anything blurry/unreadable/assumed"],
  "brief": "2-3 sentence plain-English summary for the contractor",
@@ -251,11 +254,21 @@ Rules:
 - Include wall tile / backsplash entries — mark those with surface "wall" (floors are "floor").
 - If a printed adhesive / setting material / underlayment is named, record it.
 - Anything unreadable goes in flags. Do NOT guess.
+- ALSO read the ACCESSORY / TRIM schedules if the sheet has them (wall base schedule, stair
+  nosing schedule, transition or threshold schedule, tile edge profile / Schluter trim). For each
+  one record kind EXACTLY as one of: transition, nosing, cove_base, tile_profile — with the
+  printed quantity (qty), its unit ("ea" for pieces, "lf" for linear feet), the product as
+  printed and the printed unit price if any. Use qty 0 when the schedule names the product but
+  prints no quantity.
 
 Return STRICT JSON only, no prose or markdown fence:
 {
  "flags": ["..."],
  "brief": "1-2 sentence summary of the finish schedule",
+ "accessories": [
+   {"kind":"cove_base","qty":420.0,"unit":"lf",
+    "product":"Roppe 700 Series 4in rubber wall base, colour 123","unit_price":null,"note":null}
+ ],
  "specs": [
    {"room_pattern":"Kitchen Backsplash","surface":"wall","floor_type":"Ceramic Tile",
     "product":"Daltile Rittenhouse Square 3x6 Arctic White RS01",
@@ -291,6 +304,7 @@ async def read_spec_sheet(pdf_bytes: bytes, filename: str) -> dict[str, Any]:
                 break
         parsed = _extract_json(out)
         parsed.setdefault("specs", [])
+        parsed.setdefault("accessories", [])
         parsed.setdefault("flags", [])
         parsed.setdefault("brief", "")
         parsed["engine"] = "claude-opus"
@@ -456,7 +470,8 @@ def build_accessory_lines(parsed: dict[str, Any], job_id: str, labor_rate: float
     groups = parsed.get("accessories") or []
     if not groups:
         totals = {"doors": int(parsed.get("doors") or 0), "steps": int(parsed.get("steps") or 0),
-                  "cove_base_lf": float(parsed.get("cove_base_lf") or 0)}
+                  "cove_base_lf": float(parsed.get("cove_base_lf") or 0),
+                  "tile_profile_lf": float(parsed.get("tile_profile_lf") or 0)}
         if not any(totals.values()):
             return []
         groups = [{"building": "Building A", "unit": "Whole job", **totals}]
@@ -466,7 +481,8 @@ def build_accessory_lines(parsed: dict[str, Any], job_id: str, labor_rate: float
             continue
         for kind, key, room in (("transition", "doors", "Transition strips — door openings"),
                                 ("nosing", "steps", "Stair nosings — steps"),
-                                ("cove_base", "cove_base_lf", "Cove base — wall linear feet")):
+                                ("cove_base", "cove_base_lf", "Cove base — wall linear feet"),
+                                ("tile_profile", "tile_profile_lf", "Tile edge profiles — linear feet")):
             qty = float(g.get(key) or 0)
             if qty <= 0:
                 continue

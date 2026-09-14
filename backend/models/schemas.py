@@ -114,6 +114,7 @@ class Settings(BaseModel):
     acc_transition_price: float = 18.0
     acc_nosing_price: float = 42.0
     acc_cove_base_price: float = 3.4
+    acc_tile_profile_price: float = 9.5
     # Branding shown on every quote / invoice PDF and email
     logo_data: str = ""          # data URI, set by POST /api/settings/logo
     business_number: str = ""    # company / licence / registration number
@@ -136,6 +137,7 @@ class SettingsIn(BaseModel):
     acc_transition_price: float = 18.0
     acc_nosing_price: float = 42.0
     acc_cove_base_price: float = 3.4
+    acc_tile_profile_price: float = 9.5
     business_number: str = ""
     tax_number: str = ""
     waste_overrides: dict[str, float] = {}
@@ -181,6 +183,8 @@ class Job(BaseModel):
     doors: int = 0
     steps: int = 0
     cove_base_lf: float = 0.0
+    tile_profile_lf: float = 0.0
+    spec_accessories: list[dict] = []
     index_stated: dict = {}
     index_variance: str = ""
     created_at: datetime = Field(default_factory=_now)
@@ -247,6 +251,16 @@ class LineCreate(BaseModel):
     unit_price: float = 0.0
 
 
+class SpecAccessory(BaseModel):
+    """An accessory/trim schedule row read off a spec sheet."""
+    kind: str = "transition"
+    qty: float = 0.0
+    unit: str = "ea"
+    product: str = ""
+    unit_price: float | None = None
+    note: str | None = None
+
+
 class SpecEntry(BaseModel):
     room_pattern: str = ""
     surface: str = "floor"
@@ -273,6 +287,7 @@ class SpecPricingIn(BaseModel):
 
 class SpecReadResult(BaseModel):
     specs: list[SpecEntry] = []
+    accessories: list[SpecAccessory] = []
     flags: list[str] = []
     brief: str = ""
     engine: str = ""
@@ -371,6 +386,12 @@ class Product(BaseModel):
     alternative: str = ""
     cost_per_sqft: float = 0.0
     note: str = ""
+    # Accessory catalogue: kind "accessory" items are counted (qty x unit_price), not measured.
+    kind: str = "floor"              # floor | accessory
+    accessory_kind: str = ""         # transition | nosing | cove_base | tile_profile | custom
+    unit: str = "sf"                 # sf | lf | ea
+    unit_price: float = 0.0
+    labor_hr_each: float = 0.0
     times_used: int = 0
     last_used_at: datetime | None = None
     created_at: datetime = Field(default_factory=_now)
@@ -383,6 +404,26 @@ class ProductIn(BaseModel):
     alternative: str = ""
     cost_per_sqft: float = 0.0
     note: str = ""
+    kind: str = "floor"
+    accessory_kind: str = ""
+    unit: str = "sf"
+    unit_price: float = 0.0
+    labor_hr_each: float = 0.0
+
+
+class AccessoryCounts(BaseModel):
+    """What the AI counted on this job, per accessory kind, with the account's own price."""
+    job_id: str
+    job_name: str = ""
+    rows: list[dict] = []
+
+
+class AddAccessoryIn(BaseModel):
+    job_id: str
+    qty: float
+    building: str = "Building A"
+    unit: str = "Whole job"
+    room: str = ""
 
 
 class ApproveIn(BaseModel):

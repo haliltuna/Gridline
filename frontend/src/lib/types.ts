@@ -34,6 +34,7 @@ export interface Settings {
   acc_transition_price: number;
   acc_nosing_price: number;
   acc_cove_base_price: number;
+  acc_tile_profile_price: number;
   logo_data?: string;
   business_number: string;
   tax_number: string;
@@ -74,6 +75,9 @@ export interface Job {
   cross_check_note: string | null;
   doors: number;
   steps: number;
+  cove_base_lf: number;
+  tile_profile_lf: number;
+  spec_accessories: SpecAccessory[];
   index_stated: { buildings?: number | null; units?: number | null; total_sqft?: number | null; source?: string | null };
   index_variance: string;
   brief: string;
@@ -124,6 +128,7 @@ export interface SpecEntry {
 
 export interface SpecReadResult {
   specs: SpecEntry[];
+  accessories: SpecAccessory[];
   flags: string[];
   brief: string;
   engine: string;
@@ -173,6 +178,11 @@ export interface Product {
   times_used: number;
   last_used_at: string | null;
   created_at: string;
+  kind: string;
+  accessory_kind: string;
+  unit: string;
+  unit_price: number;
+  labor_hr_each: number;
 }
 
 export interface ProductIn {
@@ -182,6 +192,11 @@ export interface ProductIn {
   alternative: string;
   cost_per_sqft: number;
   note: string;
+  kind?: string;
+  accessory_kind?: string;
+  unit?: string;
+  unit_price?: number;
+  labor_hr_each?: number;
 }
 
 export interface ApprovalView {
@@ -486,6 +501,67 @@ export interface CancelOut {
   ok: boolean;
   exit_fee: number;
   message: string;
+}
+
+export interface ExitFee {
+  outstanding: boolean;
+  id: string;
+  plan_id: string;
+  plan_name: string;
+  months_billed: number;
+  amount: number;
+  status: string;
+  created_at: string;
+}
+
+export interface DowngradeImpact {
+  from_plan: string;
+  to_plan: string;
+  is_downgrade: boolean;
+  lost_capabilities: string[];
+  warnings: string[];
+  open_quotes: number;
+  unpaid_invoices: number;
+  jobs_with_specs: number;
+  message: string;
+}
+
+// ---- accessory catalogue (mirrors lib/flooring.ACCESSORIES + routers/products.py) ----
+export interface AccessoryCatalogueRow {
+  kind: string;
+  label: string;
+  unit: string;
+  default_price: number;
+  your_price: number;
+  labor_hr_each: number;
+  counted_from: string;
+}
+
+export interface AccessoryCountRow {
+  kind: string;
+  label: string;
+  unit: string;
+  counted: number;
+  from_spec: number;
+  qty: number;
+  unit_price: number;
+  spec_product: string;
+  source: string;
+}
+
+export interface AccessoryCounts {
+  job_id: string;
+  job_name: string;
+  rows: AccessoryCountRow[];
+}
+
+export interface SpecAccessory {
+  kind: string;
+  qty: number;
+  unit: string;
+  product: string;
+  unit_price: number | null;
+  note: string | null;
 }
 
 export interface CostLine {

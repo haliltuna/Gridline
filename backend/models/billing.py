@@ -9,6 +9,10 @@ class CheckoutIn(BaseModel):
     origin_url: str
 
 
+class ExitFeeCheckoutIn(BaseModel):
+    origin_url: str
+
+
 class CheckoutSession(BaseModel):
     checkout_url: str
     session_id: str
@@ -68,6 +72,30 @@ class CancelPreview(BaseModel):
 class CancelOut(BaseModel):
     ok: bool
     exit_fee: float
+    message: str
+
+
+class ExitFee(BaseModel):
+    """The single closing invoice raised when an annual commitment is cancelled early."""
+    outstanding: bool = False
+    id: str = ""
+    plan_id: str = ""
+    plan_name: str = ""
+    months_billed: int = 0
+    amount: float = 0.0
+    status: str = ""
+    created_at: str = ""
+
+
+class DowngradeImpact(BaseModel):
+    from_plan: str
+    to_plan: str
+    is_downgrade: bool
+    lost_capabilities: list[str]
+    warnings: list[str]
+    open_quotes: int
+    unpaid_invoices: int
+    jobs_with_specs: int
     message: str
 
 
