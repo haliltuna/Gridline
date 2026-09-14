@@ -1,10 +1,11 @@
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 
 from routers.products import remember_product
 from lib.ai import apply_specs_to_line, build_accessory_lines, build_line, index_variance, line_cost, read_blueprint
+from lib.limiter import limiter
 from lib.authz import account_id, require
 from lib.db import db
 from lib.flooring import adhesive_gallons, defaults_for
@@ -57,7 +58,8 @@ async def delete_job(job_id: str, user: dict = Depends(require("job:delete"))):
 
 
 @router.post("/jobs/estimate", response_model=PageEstimate)
-async def estimate_blueprint(file: UploadFile = File(...), user: dict = Depends(require("job:write"))):
+@limiter.limit("30/hour")
+async def estimate_blueprint(request: Request, file: UploadFile = File(...), user: dict = Depends(require("job:write"))):
     """Count the set and show what it will consume BEFORE any AI money is spent."""
     raw = await file.read()
     if not raw:
@@ -104,7 +106,8 @@ async def estimate_blueprint(file: UploadFile = File(...), user: dict = Depends(
 
 
 @router.post("/jobs/{job_id}/upload", response_model=Job)
-async def upload_blueprint(job_id: str, file: UploadFile = File(...), user: dict = Depends(require("job:write"))):
+@limiter.limit("10/hour")
+async def upload_blueprint(request: Request, job_id: str, file: UploadFile = File(...), user: dict = Depends(require("job:write"))):
     job = await _job_or_404(job_id, account_id(user))
     raw = await file.read()
     if not raw:

@@ -1,13 +1,20 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
 
 from lib.auth import (
-    COOKIE_NAME, cookie_kwargs, create_session, current_user, destroy_session,
-    hash_password, verify_password,
+    COOKIE_NAME,
+    cookie_kwargs,
+    create_session,
+    current_user,
+    destroy_session,
+    hash_password,
+    verify_password,
 )
 from lib.db import db
+from lib.limiter import limiter
 from models.schemas import LoginIn, Settings, SignupIn, User
+
 import uuid
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -19,7 +26,8 @@ async def _bootstrap_settings(user_id: str) -> None:
 
 
 @router.post("/signup", response_model=User)
-async def signup(body: SignupIn, response: Response):
+@limiter.limit("3/minute")
+async def signup(request: Request, body: SignupIn, response: Response):
     email = body.email.lower()
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=409, detail="An account with that email already exists")
@@ -42,7 +50,8 @@ async def signup(body: SignupIn, response: Response):
 
 
 @router.post("/login", response_model=User)
-async def login(body: LoginIn, response: Response):
+@limiter.limit("5/minute")
+async def login(request: Request, body: LoginIn, response: Response):
     user = await db.users.find_one({"email": body.email.lower()})
     if not user or not verify_password(body.password, user.get("password_hash", "")):
         raise HTTPException(status_code=401, detail="Wrong email or password")
