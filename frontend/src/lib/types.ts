@@ -306,6 +306,13 @@ export interface PublicInvoice {
   total: number;
 }
 
+export interface HealthReport {
+  status: string;
+  missing_required: string[];
+  missing_optional: string[];
+  hint: string;
+}
+
 export interface ReferenceOptions {
   scopes: { id: string; label: string }[];
   floor_types: string[];

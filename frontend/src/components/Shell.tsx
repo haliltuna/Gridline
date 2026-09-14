@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { endSession } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import ThemeSwitcher from "@/components/ThemeSwitcher";
+import HealthBanner from "@/components/HealthBanner";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -112,6 +113,8 @@ export default function Shell({ children, title, subtitle, action }: {
           Can't reach the Gridline server right now — your data will reappear when the connection is back.
         </div>
       )}
+
+      <HealthBanner />
 
       <main className="mx-auto max-w-[1400px] px-5 py-8">
         <div className="mb-8 flex flex-wrap items-end justify-between gap-4">

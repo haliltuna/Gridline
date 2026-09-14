@@ -311,3 +311,14 @@ Test guidance: /app/auth_testing.md (seed a sessions row; OAuth itself is not sc
   lines for optional ones naming the feature that switches off. The result is stored on
   `app.state.config` and surfaced by `GET /api/health` as `{status, missing_required,
   missing_optional, hint}` — key names only, never values.
+
+## Setup docs + in-app health banner (latest)
+- README gained a "Clone to running on a new machine" section: clone, venv + `pip install -r
+  backend/requirements.txt`, `cp backend/.env.example backend/.env` and edit, `yarn install` in
+  frontend, optional `python backend/seed.py` for demo data (demo@gridline.app / gridline123),
+  then uvicorn on 8001 + `yarn dev` on 3000, finishing with a `curl /api/health` wiring check.
+- `frontend/src/components/HealthBanner.tsx` reads `GET /api/health` (TanStack Query, 5-min
+  staleTime) and renders a quiet dismissible strip inside `Shell` under the offline banner: amber
+  when only optional keys are missing, red when a required one is. It maps key names to
+  plain-English features (e.g. EMERGENT_LLM_KEY → "AI blueprint & spec-sheet reading") and ignores
+  SENDER_EMAIL / CORS_ORIGINS, which have safe defaults. Matching TS interface: `HealthReport`.

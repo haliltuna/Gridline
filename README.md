@@ -14,6 +14,38 @@ farm-ts/
   tests/     Playwright e2e workspace (pre-scaffolded)
 ```
 
+## Clone to running on a new machine
+
+Prerequisites: Python 3.11+, Node 20+ with Yarn, and MongoDB running locally
+(or a connection string to a hosted one).
+
+```bash
+git clone <your-repo-url> gridline && cd gridline
+
+# 1. backend deps (a virtualenv keeps them off the system Python)
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r backend/requirements.txt
+
+# 2. configuration — .env is git-ignored, the example lists every key
+cp backend/.env.example backend/.env
+$EDITOR backend/.env        # set MONGO_URL, DB_NAME, APP_URL; add keys for AI/Stripe/email
+
+# 3. frontend deps (yarn only — never npm)
+cd frontend && yarn install && cd ..
+
+# 4. optional: demo data (login demo@gridline.app / gridline123)
+python backend/seed.py
+
+# 5. run the two processes in two terminals
+cd backend && uvicorn server:app --host 0.0.0.0 --port 8001 --reload
+cd frontend && yarn dev                       # open http://localhost:3000
+```
+
+Check the wiring: `curl http://localhost:8001/api/health` reports which keys are
+missing and what each one turns off (names only, never values) — the same report
+the backend logs at boot and the app shows as a banner when signed in. An empty
+`missing_required` means you are good to go.
+
 ## Running
 
 Two separate processes, managed by supervisor in the pod (see "Pod conventions"
