@@ -10,7 +10,7 @@ from pymongo import ASCENDING, DESCENDING, IndexModel
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-mongo_url = os.environ[mongodb+srv://gridline-admin:SOMEPASSWORD@cluster0.something.mongodb.net/?retryWrites=true&w=majority]
+mongo_url = os.environ[mongodb+srv://halilkocabiyikci_db_user:Sz0xfGZf3SpFcjBm@gridline-cluster.dnhklhw.mongodb.net]
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ["DB_NAME"]]
 
