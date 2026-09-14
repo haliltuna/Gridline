@@ -1,4 +1,10 @@
-"""Blueprint reading engine: PDF pages -> high-res PNG -> Claude Opus vision -> takeoff lines."""
+"""Blueprint reading engine: PDF pages -> high-res PNG -> Claude Opus vision -> takeoff lines.
+
+Uses the official Anthropic SDK when ANTHROPIC_API_KEY is set (the deployment path).
+Falls back to Emergent's integration proxy when only EMERGENT_LLM_KEY is present (works
+inside Emergent's preview). Falls back to deterministic demo lines when neither key exists,
+so the upload flow is never dead-ended by a missing credential.
+"""
 
 import base64
 import io
@@ -15,46 +21,49 @@ from lib.flooring import FLOOR_TYPE_NAMES, accessory_defaults, adhesive_gallons,
 
 logger = logging.getLogger(__name__)
 
-MODEL = "claude-opus-4-5-20251101"
+# Anthropic's current Opus model. Change this one string to move to a newer revision.
+ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-4-5")
+EMERGENT_MODEL = "claude-opus-4-5-20251101"
+
 MAX_PAGES_TO_READ = 12  # accuracy over speed; sets past 100 pages are sampled across the set
 RENDER_SCALE = 2.6  # ~200 DPI
+
 
 SYSTEM = f"""You are a senior commercial flooring estimator reading architectural blueprints.
 
 STEP 1 — READ, DO NOT GUESS.
-Record the printed drawing scale and every WRITTEN room dimension / area callout.
-ALWAYS trust printed text over visual estimation. If a room's dimensions are blurry,
-cut off, or unreadable, mark that room needs_review=true and explain in review_note
-instead of inventing a number.
+Record the printed drawing scale and every WRITTEN room dimension / area callout. ALWAYS
+trust printed text over visual estimation. If a room's dimensions are blurry, cut off, or
+unreadable, mark that room needs_review=true and explain in review_note instead of
+inventing a number.
 
 STEP 2 — CALCULATE.
 For each room compute square footage, choose the floor type from EXACTLY this list:
 {", ".join(FLOOR_TYPE_NAMES)}.
 Count wall/backsplash tile areas as their own line items (floor_type Ceramic Tile or
-Porcelain Tile, room name like "Kitchen Backsplash").
-Group everything by building and unit. Count bedrooms and bathrooms per unit.
-If the drawing states a building or unit total area, cross-check your room sum against it
-and report the discrepancy.
+Porcelain Tile, room name like "Kitchen Backsplash"). Group everything by building and
+unit. Count bedrooms and bathrooms per unit. If the drawing states a building or unit
+total area, cross-check your room sum against it and report the discrepancy.
 
 STEP 2b — COUNT THE TRIM WORK.
 Flooring bids are lost on the accessories, so COUNT them as well as measuring areas:
  * doors: every door opening / doorway in the scope (each one needs a transition strip)
  * steps: every stair tread / step (each one needs a stair nosing)
  * stair_runs: number of separate stair runs
- * tile_profile_lf: linear feet of tile edge profile / trim (Schluter-type) — every exposed tile
-   edge, outside corner, threshold or transition where tile meets another finish
+ * tile_profile_lf: linear feet of tile edge profile / trim (Schluter-type) — every exposed
+   tile edge, outside corner, threshold or transition where tile meets another finish
  * cove_base_lf: linear feet of wall base / cove base — measure the room perimeter from the
-   printed dimensions and SUBTRACT the door openings (about 3 ft each). Only count rooms whose
-   finish gets a wall base (typically resilient, VCT and tile rooms, not carpeted bedrooms
-   unless the schedule says so).
-Report them per unit in "accessories" AND as project totals. Count what you can actually see;
-if a sheet is unreadable say so in flags instead of guessing.
+   printed dimensions and SUBTRACT the door openings (about 3 ft each). Only count rooms
+   whose finish gets a wall base (typically resilient, VCT and tile rooms, not carpeted
+   bedrooms unless the schedule says so).
+Report them per unit in "accessories" AND as project totals. Count what you can actually
+see; if a sheet is unreadable say so in flags instead of guessing.
 
 STEP 2c — THE INDEX / COVER SHEET.
-The first few sheets of a set often state the project totals: number of buildings, number of
-units and total square footage. Record exactly what is printed in "index_stated" so we can
-show the difference between the drawing's own numbers and what was measured. Use null for
-anything not printed. Never copy a stated number into a room measurement.
+The first few sheets of a set often state the project totals: number of buildings, number
+of units and total square footage. Record exactly what is printed in "index_stated" so we
+can show the difference between the drawing's own numbers and what was measured. Use null
+for anything not printed. Never copy a stated number into a room measurement.
 
 Return STRICT JSON only, no prose, no markdown fence:
 {{
@@ -62,42 +71,36 @@ Return STRICT JSON only, no prose, no markdown fence:
  "project_type": "single-family | multi-family | commercial",
  "buildings": <int>, "units": <int>, "bedrooms": <int>, "bathrooms": <int>,
  "stated_total_sqft": <number or null>,
- "index_stated": {{"buildings": <int or null>, "units": <int or null>,
-                  "total_sqft": <number or null>, "source": "sheet name/number or null"}},
- "doors": <int total door openings>, "steps": <int total stair treads>,
+ "index_stated": {{"buildings": <int or null>, "units": <int or null>, "total_sqft": <number or null>, "source": "sheet name/number or null"}},
+ "doors": <int total door openings>,
+ "steps": <int total stair treads>,
  "cove_base_lf": <number, total linear feet of wall base>,
  "tile_profile_lf": <number, total linear feet of tile edge profile / trim>,
- "accessories": [{{"building":"Building A","unit":"Unit 101","doors":4,"steps":0,
-                  "cove_base_lf":128.5,"tile_profile_lf":22.0,"note":null}}],
+ "accessories": [{{"building":"Building A","unit":"Unit 101","doors":4,"steps":0, "cove_base_lf":128.5,"tile_profile_lf":22.0,"note":null}}],
  "cross_check_note": "string or null",
  "flags": ["anything blurry/unreadable/assumed"],
  "brief": "2-3 sentence plain-English summary for the contractor",
  "specs": [
-   {{"room_pattern":"Kitchen Backsplash","surface":"wall","floor_type":"Ceramic Tile",
-     "product":"exact manufacturer + product + colour + code as printed",
-     "adhesive":"printed setting material or null","unit_type":null,"note":null}}
+   {{"room_pattern":"Kitchen Backsplash","surface":"wall","floor_type":"Ceramic Tile", "product":"exact manufacturer + product + colour + code as printed", "adhesive":"printed setting material or null","unit_type":null,"note":null}}
  ],
  "lines": [
-   {{"building":"Building A","unit":"Unit 101","room":"Living Room",
-     "floor_type":"Luxury Vinyl Plank","length_ft":18.0,"width_ft":14.0,"sqft":252.0,
-     "product":"specified product if the sheet names one, else null",
-     "source":"written dimension 18'-0\\" x 14'-0\\"","needs_review":false,"review_note":null}}
+   {{"building":"Building A","unit":"Unit 101","room":"Living Room", "floor_type":"Luxury Vinyl Plank","length_ft":18.0,"width_ft":14.0,"sqft":252.0, "product":"specified product if the sheet names one, else null", "source":"written dimension 18'-0\\" x 14'-0\\"","needs_review":false,"review_note":null}}
  ]
 }}
 
 STEP 2d — NAME THE PRODUCT, NOT THE CATEGORY.
 Every supply line must carry the BRANDED product from the drawings' own finish schedule /
-material legend: manufacturer + series + colour + item code, copied exactly
-(e.g. "Shaw Fifth Avenue Oak 5mm SPC 0847V-00734 Ravine"). Put it in "product". If the sheet
-names an approved alternative or "or equal", put that in "product_alt". Only leave "product"
-empty when the drawings genuinely print no product name — then add a flag saying so. Never
+material legend: manufacturer + series + colour + item code, copied exactly (e.g. "Shaw
+Fifth Avenue Oak 5mm SPC 0847V-00734 Ravine"). Put it in "product". If the sheet names an
+approved alternative or "or equal", put that in "product_alt". Only leave "product" empty
+when the drawings genuinely print no product name — then add a flag saying so. Never
 invent a brand, and never put the generic category ("LVT", "ceramic tile") in "product".
 
 STEP 3 — SPECS IF PRESENT.
-Many sets include a finish schedule or keynote legend naming the actual products. If this set
-has one, fill "specs" with each product-to-room mapping, copying manufacturer/product/colour/code
-EXACTLY as printed, and put the specified product on the matching lines. If there is no schedule
-in the drawings, return "specs": []."""
+Many sets include a finish schedule or keynote legend naming the actual products. If this
+set has one, fill "specs" with each product-to-room mapping, copying manufacturer/product/
+colour/code EXACTLY as printed, and put the specified product on the matching lines. If
+there is no schedule in the drawings, return "specs": []."""
 
 
 def render_pages(pdf_bytes: bytes) -> tuple[list[str], int]:
@@ -130,6 +133,71 @@ def _extract_json(text: str) -> dict[str, Any]:
     return json.loads(text[start : end + 1])
 
 
+# ---------------------------------------------------------------------------
+# AI backends — Anthropic first (deployments), Emergent second (preview only)
+# ---------------------------------------------------------------------------
+
+async def _run_anthropic(images: list[str], user_text: str, system: str) -> str:
+    """Call Claude Opus through the official Anthropic SDK. Returns raw text output."""
+    import anthropic
+
+    client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    content: list[dict[str, Any]] = [
+        {
+            "type": "image",
+            "source": {"type": "base64", "media_type": "image/jpeg", "data": b},
+        }
+        for b in images
+    ]
+    content.append({"type": "text", "text": user_text})
+
+    resp = await client.messages.create(
+        model=ANTHROPIC_MODEL,
+        max_tokens=8192,
+        system=system,
+        messages=[{"role": "user", "content": content}],
+    )
+    # Concatenate any text blocks the model returns.
+    return "".join(block.text for block in resp.content if getattr(block, "type", "") == "text")
+
+
+async def _run_emergent(images: list[str], user_text: str, system: str) -> str:
+    """Call Claude via Emergent's integration proxy. Only used inside Emergent's preview."""
+    from emergentintegrations.llm.chat import (
+        ImageContent,
+        LlmChat,
+        StreamDone,
+        TextDelta,
+        UserMessage,
+    )
+
+    chat = LlmChat(
+        api_key=os.environ["EMERGENT_LLM_KEY"],
+        session_id=f"takeoff-{uuid.uuid4()}",
+        system_message=system,
+    ).with_model("anthropic", EMERGENT_MODEL)
+    msg = UserMessage(
+        text=user_text,
+        file_contents=[ImageContent(image_base64=b) for b in images],
+    )
+    out = ""
+    async for ev in chat.stream_message(msg):
+        if isinstance(ev, TextDelta):
+            out += ev.content
+        elif isinstance(ev, StreamDone):
+            break
+    return out
+
+
+async def _call_claude(images: list[str], user_text: str, system: str) -> tuple[str, str]:
+    """Route to whichever backend has a key. Returns (text, engine_label)."""
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        return await _run_anthropic(images, user_text, system), "claude-opus"
+    if os.environ.get("EMERGENT_LLM_KEY"):
+        return await _run_emergent(images, user_text, system), "claude-opus"
+    raise RuntimeError("no AI key configured (ANTHROPIC_API_KEY or EMERGENT_LLM_KEY)")
+
+
 def _spec_hint(specs: list[dict[str, Any]] | None) -> str:
     """Spec-first: the finish schedule is read BEFORE the drawings, so the specified products
     are handed to the measuring pass and land on each matching room as it is created."""
@@ -138,49 +206,37 @@ def _spec_hint(specs: list[dict[str, Any]] | None) -> str:
     lines = []
     for sp in specs[:60]:
         alt = f" | approved alternative: {sp.get('alternative')}" if sp.get("alternative") else ""
-        lines.append(f"- {sp.get('room_pattern', 'ALL')} ({sp.get('surface', 'floor')}): "
-                     f"{sp.get('floor_type', '')} — {sp.get('product', '')}{alt}")
-    return ("\n\nTHE FINISH SCHEDULE FOR THIS SET HAS ALREADY BEEN READ. Use these products; "
-            "put the matching product name on each room's line and do NOT invent other products:\n"
-            + "\n".join(lines))
+        lines.append(
+            f"- {sp.get('room_pattern', 'ALL')} ({sp.get('surface', 'floor')}): "
+            f"{sp.get('floor_type', '')} — {sp.get('product', '')}{alt}"
+        )
+    return (
+        "\n\nTHE FINISH SCHEDULE FOR THIS SET HAS ALREADY BEEN READ. Use these products; "
+        "put the matching product name on each room's line and do NOT invent other products:\n"
+        + "\n".join(lines)
+    )
 
 
-async def read_blueprint(pdf_bytes: bytes, filename: str,
-                         specs: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+async def read_blueprint(
+    pdf_bytes: bytes, filename: str, specs: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
     images, total_pages = render_pages(pdf_bytes)
-    key = os.environ.get("EMERGENT_LLM_KEY", "")
-    parsed: dict[str, Any] | None = None
-    engine = "claude-opus"
-    if key and images:
-        try:
-            from emergentintegrations.llm.chat import ImageContent, LlmChat, StreamDone, TextDelta, UserMessage
 
-            chat = LlmChat(
-                api_key=key,
-                session_id=f"takeoff-{uuid.uuid4()}",
-                system_message=SYSTEM,
-            ).with_model("anthropic", MODEL)
-            msg = UserMessage(
-                text=(
-                    f"Blueprint set '{filename}' — {total_pages} page(s), {len(images)} rendered here. "
-                    "Produce the takeoff JSON exactly as specified."
-                    + _spec_hint(specs)
-                ),
-                file_contents=[ImageContent(image_base64=b) for b in images],
-            )
-            out = ""
-            async for ev in chat.stream_message(msg):
-                if isinstance(ev, TextDelta):
-                    out += ev.content
-                elif isinstance(ev, StreamDone):
-                    break
-            parsed = _extract_json(out)
-        except Exception as exc:  # never dead-end the upload
+    user_text = (
+        f"Blueprint set '{filename}' — {total_pages} page(s), {len(images)} rendered here. "
+        "Produce the takeoff JSON exactly as specified." + _spec_hint(specs)
+    )
+
+    parsed: dict[str, Any] | None = None
+    engine = "fallback"
+    if images:
+        try:
+            text, engine = await _call_claude(images, user_text, SYSTEM)
+            parsed = _extract_json(text)
+        except Exception as exc:  # noqa: BLE001 — never dead-end the upload
             logger.error("blueprint AI read failed: %s", exc)
             parsed = None
             engine = "fallback"
-    else:
-        engine = "fallback"
 
     if not parsed or not parsed.get("lines"):
         parsed = _fallback(filename, total_pages)
@@ -214,19 +270,25 @@ def _fallback(filename: str, pages: int) -> dict[str, Any]:
         "doors": 6,
         "steps": 0,
         "cove_base_lf": 96.0,
-        "accessories": [{"building": "Building A", "unit": "Unit 101", "doors": 4, "steps": 0,
-                         "cove_base_lf": 64.0, "note": None},
-                        {"building": "Building A", "unit": "Unit 102", "doors": 2, "steps": 0,
-                         "cove_base_lf": 32.0, "note": None}],
+        "accessories": [
+            {"building": "Building A", "unit": "Unit 101", "doors": 4, "steps": 0, "cove_base_lf": 64.0, "note": None},
+            {"building": "Building A", "unit": "Unit 102", "doors": 2, "steps": 0, "cove_base_lf": 32.0, "note": None},
+        ],
         "cross_check_note": None,
         "specs": [],
         "flags": ["AI reader unavailable — starter takeoff generated. Verify every dimension before quoting."],
         "brief": f"Starter takeoff for {filename} ({pages} page(s)). 1 building, 2 units, 2 bedrooms, 2 bathrooms, including backsplash tile. Review and edit each line before converting to a quote.",
         "lines": [
             {
-                "building": "Building A", "unit": u, "room": r, "floor_type": ft,
-                "length_ft": l, "width_ft": w, "sqft": round(l * w, 1),
-                "source": "estimated", "needs_review": True,
+                "building": "Building A",
+                "unit": u,
+                "room": r,
+                "floor_type": ft,
+                "length_ft": l,
+                "width_ft": w,
+                "sqft": round(l * w, 1),
+                "source": "estimated",
+                "needs_review": True,
                 "review_note": "Generated without AI read — confirm dimensions.",
             }
             for (u, r, ft, l, w) in rooms
@@ -234,87 +296,81 @@ def _fallback(filename: str, pages: int) -> dict[str, Any]:
     }
 
 
-SPEC_SYSTEM = """You are reading a flooring FINISH SCHEDULE / PRODUCT SPECIFICATION for a
-construction project. These sheets tell the installer WHICH product goes WHERE.
-
-Extract every product-to-location mapping you can read. Typical sources: finish schedules,
-room finish matrices, keynote legends, product data sheets, "FLOORING" spec sections.
+SPEC_SYSTEM = (
+    """You are reading a flooring FINISH SCHEDULE / PRODUCT SPECIFICATION for a construction project.
+These sheets tell the installer WHICH product goes WHERE. Extract every product-to-location mapping you can read.
+Typical sources: finish schedules, room finish matrices, keynote legends, product data sheets, "FLOORING" spec sections.
 
 Rules:
-- FLOORING SCOPE ONLY. Take flooring, wall/backsplash tile, stair nosings, transitions, cove base,
-  underlayment and setting materials. IGNORE paint, wallcovering, millwork, casework, countertops,
-  plumbing and anything else outside the flooring subcontractor's scope.
+- FLOORING SCOPE ONLY. Take flooring, wall/backsplash tile, stair nosings, transitions, cove base, underlayment and setting materials. IGNORE paint, wallcovering, millwork, casework, countertops, plumbing and anything else outside the flooring subcontractor's scope.
 - If the schedule names an approved alternative / "or equal" product, record it in "alternative".
 - If a unit price is printed (per sq ft, per piece), record it in "price_per_sqft"; otherwise null.
 - Copy manufacturer, product name/series, colour and item code EXACTLY as printed. Never invent one.
-- room_pattern is the room or area the product applies to, as printed ("Kitchen", "Bathrooms",
-  "All Unit Type A bedrooms", "Corridors", "Kitchen Backsplash"). Use "ALL" for a project-wide default.
-- Map each product to one of these categories EXACTLY:
-""" + ", ".join(FLOOR_TYPE_NAMES) + """
+- room_pattern is the room or area the product applies to, as printed ("Kitchen", "Bathrooms", "All Unit Type A bedrooms", "Corridors", "Kitchen Backsplash"). Use "ALL" for a project-wide default.
+- Map each product to one of these categories EXACTLY: """
+    + ", ".join(FLOOR_TYPE_NAMES)
+    + """
 - Include wall tile / backsplash entries — mark those with surface "wall" (floors are "floor").
 - If a printed adhesive / setting material / underlayment is named, record it.
 - Anything unreadable goes in flags. Do NOT guess.
-- ALSO read the ACCESSORY / TRIM schedules if the sheet has them (wall base schedule, stair
-  nosing schedule, transition or threshold schedule, tile edge profile / Schluter trim). For each
-  one record kind EXACTLY as one of: transition, nosing, cove_base, tile_profile — with the
-  printed quantity (qty), its unit ("ea" for pieces, "lf" for linear feet), the product as
-  printed and the printed unit price if any. Use qty 0 when the schedule names the product but
-  prints no quantity.
+- ALSO read the ACCESSORY / TRIM schedules if the sheet has them (wall base schedule, stair nosing schedule, transition or threshold schedule, tile edge profile / Schluter trim). For each one record kind EXACTLY as one of: transition, nosing, cove_base, tile_profile — with the printed quantity (qty), its unit ("ea" for pieces, "lf" for linear feet), the product as printed and the printed unit price if any. Use qty 0 when the schedule names the product but prints no quantity.
 
 Return STRICT JSON only, no prose or markdown fence:
 {
  "flags": ["..."],
  "brief": "1-2 sentence summary of the finish schedule",
  "accessories": [
-   {"kind":"cove_base","qty":420.0,"unit":"lf",
-    "product":"Roppe 700 Series 4in rubber wall base, colour 123","unit_price":null,"note":null}
+   {"kind":"cove_base","qty":420.0,"unit":"lf", "product":"Roppe 700 Series 4in rubber wall base, colour 123","unit_price":null,"note":null}
  ],
  "specs": [
-   {"room_pattern":"Kitchen Backsplash","surface":"wall","floor_type":"Ceramic Tile",
-    "product":"Daltile Rittenhouse Square 3x6 Arctic White RS01",
-    "alternative":"approved equal as printed, else null",
-    "price_per_sqft": null,
-    "adhesive":"White polymer-modified thin-set","unit_type":"Type A or null","note":null}
+   {"room_pattern":"Kitchen Backsplash","surface":"wall","floor_type":"Ceramic Tile", "product":"Daltile Rittenhouse Square 3x6 Arctic White RS01", "alternative":"approved equal as printed, else null", "price_per_sqft": null, "adhesive":"White polymer-modified thin-set","unit_type":"Type A or null","note":null}
  ]
 }"""
+)
 
 
 async def read_spec_sheet(pdf_bytes: bytes, filename: str) -> dict[str, Any]:
     """Read a standalone spec / finish-schedule PDF into product-to-room mappings."""
     images, total_pages = render_pages(pdf_bytes)
-    key = os.environ.get("EMERGENT_LLM_KEY", "")
-    if not key or not images:
-        return {"specs": [], "flags": ["AI reader unavailable — add products manually."],
-                "brief": "", "engine": "fallback", "pages": total_pages}
-    try:
-        from emergentintegrations.llm.chat import ImageContent, LlmChat, StreamDone, TextDelta, UserMessage
 
-        chat = LlmChat(api_key=key, session_id=f"spec-{uuid.uuid4()}", system_message=SPEC_SYSTEM).with_model(
-            "anthropic", MODEL
-        )
-        msg = UserMessage(
-            text=f"Finish schedule '{filename}' — {total_pages} page(s). Extract the product-to-room mappings as JSON.",
-            file_contents=[ImageContent(image_base64=b) for b in images],
-        )
-        out = ""
-        async for ev in chat.stream_message(msg):
-            if isinstance(ev, TextDelta):
-                out += ev.content
-            elif isinstance(ev, StreamDone):
-                break
-        parsed = _extract_json(out)
+    if not images:
+        return {
+            "specs": [],
+            "flags": ["AI reader unavailable — add products manually."],
+            "brief": "",
+            "engine": "fallback",
+            "pages": total_pages,
+        }
+
+    user_text = (
+        f"Finish schedule '{filename}' — {total_pages} page(s). "
+        "Extract the product-to-room mappings as JSON."
+    )
+
+    try:
+        text, engine = await _call_claude(images, user_text, SPEC_SYSTEM)
+        parsed = _extract_json(text)
         parsed.setdefault("specs", [])
         parsed.setdefault("accessories", [])
         parsed.setdefault("flags", [])
         parsed.setdefault("brief", "")
-        parsed["engine"] = "claude-opus"
+        parsed["engine"] = engine
         parsed["pages"] = total_pages
         return parsed
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.error("spec sheet read failed: %s", exc)
-        return {"specs": [], "flags": [f"Could not read the spec sheet automatically: {exc}"],
-                "brief": "", "engine": "fallback", "pages": total_pages}
+        return {
+            "specs": [],
+            "flags": [f"Could not read the spec sheet automatically: {exc}"],
+            "brief": "",
+            "engine": "fallback",
+            "pages": total_pages,
+        }
 
+
+# ---------------------------------------------------------------------------
+# Pure logic (unchanged) — specs matching, line building, cost, accessories
+# ---------------------------------------------------------------------------
 
 def _spec_matches(spec: dict[str, Any], line: dict[str, Any]) -> int:
     """Score how well a spec entry matches a takeoff line. 0 = no match."""
@@ -326,7 +382,6 @@ def _spec_matches(spec: dict[str, Any], line: dict[str, Any]) -> int:
     if pattern in ("all", "*", "all rooms", "all areas"):
         return 1
     haystack = f"{room} {unit}"
-    # A backsplash/wall spec must not land on a floor line, and vice versa.
     wall_spec = str(spec.get("surface") or "floor").lower() == "wall"
     wall_line = any(w in room for w in ("backsplash", "wall", "wainscot", "shower surround"))
     if wall_spec != wall_line:
@@ -336,7 +391,6 @@ def _spec_matches(spec: dict[str, Any], line: dict[str, Any]) -> int:
         return 0
     hits = sum(1 for w in words if w in haystack)
     if hits == 0:
-        # singular/plural fallback: "bathrooms" spec vs "Bathroom 1" line
         hits = sum(1 for w in words if w.rstrip("s") and w.rstrip("s") in haystack)
     return hits * 10 if hits else 0
 
@@ -372,8 +426,9 @@ def apply_specs_to_line(line: dict[str, Any], specs: list[dict[str, Any]]) -> di
     return patch
 
 
-def build_line(raw: dict[str, Any], job_id: str, labor_rate: float,
-               waste_overrides: dict[str, float] | None = None) -> dict[str, Any]:
+def build_line(
+    raw: dict[str, Any], job_id: str, labor_rate: float, waste_overrides: dict[str, float] | None = None
+) -> dict[str, Any]:
     scope = raw.get("scope") or "supply_install"
     if scope not in ("supply_install", "install_only", "supply_only", "misc", "accessory"):
         scope = "supply_install"
@@ -382,15 +437,13 @@ def build_line(raw: dict[str, Any], job_id: str, labor_rate: float,
         ft = "Luxury Vinyl Plank"
     d = defaults_for(ft)
     sqft = float(raw.get("sqft") or 0) or round(float(raw.get("length_ft") or 0) * float(raw.get("width_ft") or 0), 1)
-    # Waste: what the AI read on the sheet wins; otherwise the account's own default for that
-    # floor type; otherwise the industry figure in lib/flooring.
     default_waste = float((waste_overrides or {}).get(ft, d["waste"]))
     waste = float(raw["waste_pct"]) if raw.get("waste_pct") is not None else default_waste
     total_sqft = round(sqft * (1 + waste / 100), 1)
     qty = float(raw.get("qty") or 0)
     unit_price = float(raw.get("unit_price") or 0)
+
     if scope == "accessory":
-        # Counted trim work: qty pieces at a unit price, plus its own install minutes each.
         return {
             "id": str(uuid.uuid4()),
             "job_id": job_id,
@@ -402,7 +455,10 @@ def build_line(raw: dict[str, Any], job_id: str, labor_rate: float,
             "product": raw.get("product") or "",
             "product_alt": raw.get("product_alt") or "",
             "spec_note": raw.get("spec_note") or "",
-            "sqft": 0.0, "waste_pct": 0.0, "adhesive": "", "adhesive_gallons": 0.0,
+            "sqft": 0.0,
+            "waste_pct": 0.0,
+            "adhesive": "",
+            "adhesive_gallons": 0.0,
             "material_cost_per_sqft": 0.0,
             "qty": qty,
             "unit_price": unit_price,
@@ -414,6 +470,7 @@ def build_line(raw: dict[str, Any], job_id: str, labor_rate: float,
             "source": raw.get("source"),
             "approved": False,
         }
+
     return {
         "id": str(uuid.uuid4()),
         "job_id": job_id,
@@ -460,37 +517,31 @@ def line_cost(line: dict[str, Any]) -> float:
     return round(material + labor, 2)
 
 
-def build_accessory_lines(parsed: dict[str, Any], job_id: str, labor_rate: float,
-                          prices: dict[str, float] | None = None,
-                          catalogue: dict[str, dict[str, Any]] | None = None,
-                          spec_rows: dict[str, dict[str, Any]] | None = None,
-                          unit_weights: list[tuple[str, str, float]] | None = None,
-                          ) -> list[dict[str, Any]]:
-    """Turn the AI's door, step, wall-base and tile-profile counts into priced accessory lines.
-
-    `prices` is the account's own accessory pricing (settings) keyed by kind; anything missing
-    falls back to the built-in defaults in lib/flooring.ACCESSORIES. `catalogue` is the saved
-    accessory product per kind (name, unit_price, labor_hr_each) — a saved product wins, so the
-    trim lands on the takeoff already named the way this contractor buys it. `spec_rows` are the
-    trim schedule rows read off the spec sheet, used as the quantity when the drawings counted
-    nothing and always as the product name. `unit_weights` is [(building, unit, sqft)] from the
-    measured lines: a whole-job total (cove base, tile profiles, doors, steps) is then split out
-    per unit in proportion to that unit's floor area instead of landing as one lump line, so the
-    client sees the trim priced against the unit it belongs to.
-    """
+def build_accessory_lines(
+    parsed: dict[str, Any],
+    job_id: str,
+    labor_rate: float,
+    prices: dict[str, float] | None = None,
+    catalogue: dict[str, dict[str, Any]] | None = None,
+    spec_rows: dict[str, dict[str, Any]] | None = None,
+    unit_weights: list[tuple[str, str, float]] | None = None,
+) -> list[dict[str, Any]]:
+    """Turn the AI's door, step, wall-base and tile-profile counts into priced accessory lines."""
     groups = parsed.get("accessories") or []
     if not groups:
-        totals = {"doors": int(parsed.get("doors") or 0), "steps": int(parsed.get("steps") or 0),
-                  "cove_base_lf": float(parsed.get("cove_base_lf") or 0),
-                  "tile_profile_lf": float(parsed.get("tile_profile_lf") or 0)}
+        totals = {
+            "doors": int(parsed.get("doors") or 0),
+            "steps": int(parsed.get("steps") or 0),
+            "cove_base_lf": float(parsed.get("cove_base_lf") or 0),
+            "tile_profile_lf": float(parsed.get("tile_profile_lf") or 0),
+        }
         if not any(totals.values()) and not any(
-                float((r or {}).get("qty") or 0) > 0 for r in (spec_rows or {}).values()):
+            float((r or {}).get("qty") or 0) > 0 for r in (spec_rows or {}).values()
+        ):
             return []
         groups = [{"building": "Building A", "unit": "Whole job", **totals}]
-    # Spec-sheet quantities only stand in when there is a single whole-job group; per-unit
-    # groups are trusted as-is so a schedule total is never double-counted.
+
     single_group = len(groups) == 1
-    # A single whole-job group becomes one group per unit, weighted by measured floor area.
     weights = [w for w in (unit_weights or []) if float(w[2]) > 0]
     if single_group and len(weights) > 1:
         total_sqft = sum(float(w[2]) for w in weights)
@@ -498,13 +549,10 @@ def build_accessory_lines(parsed: dict[str, Any], job_id: str, labor_rate: float
         spread: list[dict[str, Any]] = []
         for building, unit, sqft in weights:
             share = float(sqft) / total_sqft
-            row: dict[str, Any] = {"building": building, "unit": unit, "share": share,
-                                   "note": g0.get("note")}
+            row: dict[str, Any] = {"building": building, "unit": unit, "share": share, "note": g0.get("note")}
             for key in ("cove_base_lf", "tile_profile_lf"):
                 row[key] = float(g0.get(key) or 0) * share
             spread.append(row)
-        # Counted items are whole pieces: allocate by largest remainder so the per-unit lines
-        # still add up to exactly what was counted on the drawings.
         for key in ("doors", "steps"):
             total = int(round(float(g0.get(key) or 0)))
             if total <= 0:
@@ -520,56 +568,71 @@ def build_accessory_lines(parsed: dict[str, Any], job_id: str, labor_rate: float
             for row, n in zip(spread, base):
                 row[key] = n
         groups = spread
+
     out: list[dict[str, Any]] = []
     for g in groups:
         if not isinstance(g, dict):
             continue
-        for kind, key, room in (("transition", "doors", "Transition strips — door openings"),
-                                ("nosing", "steps", "Stair nosings — steps"),
-                                ("cove_base", "cove_base_lf", "Cove base — wall linear feet"),
-                                ("tile_profile", "tile_profile_lf", "Tile edge profiles — linear feet")):
+        for kind, key, room in (
+            ("transition", "doors", "Transition strips — door openings"),
+            ("nosing", "steps", "Stair nosings — steps"),
+            ("cove_base", "cove_base_lf", "Cove base — wall linear feet"),
+            ("tile_profile", "tile_profile_lf", "Tile edge profiles — linear feet"),
+        ):
             spec = (spec_rows or {}).get(kind) or {}
             qty = float(g.get(key) or 0)
             counted = qty > 0
             share = float(g.get("share") or 0)
             if not counted and single_group and share > 0:
-                # whole-job group was spread per unit: the spec total follows the same split
                 qty = float(spec.get("qty") or 0) * share
             elif not counted and single_group:
-                # Nothing on the drawings for this trim, but the finish schedule printed a
-                # quantity — quote it rather than dropping the scope.
                 qty = float(spec.get("qty") or 0)
             if qty <= 0:
                 continue
             d = accessory_defaults(kind)
             saved = (catalogue or {}).get(kind) or {}
-            unit_price = float(saved.get("unit_price") or 0) or float(spec.get("unit_price") or 0) \
-                or float((prices or {}).get(kind) or 0) or float(d["unit_price"])
+            unit_price = (
+                float(saved.get("unit_price") or 0)
+                or float(spec.get("unit_price") or 0)
+                or float((prices or {}).get(kind) or 0)
+                or float(d["unit_price"])
+            )
             hr_each = float(saved.get("labor_hr_each") or d["labor_hr_each"])
             product = str(saved.get("name") or spec.get("product") or "")
             if key in ("doors", "steps"):
-                qty = float(round(qty))          # you cannot install half a nosing
-                if qty <= 0:
-                    continue
-            where = (f"counted from the drawings ({qty:,.0f} {d['unit']}"
-                     + ("" if d["unit"] == "lf" else "s") + ")") if counted \
-                else f"read from the spec sheet ({qty:,.0f} {d['unit']})"
+                qty = float(round(qty))
+            if qty <= 0:
+                continue
+            where = (
+                f"counted from the drawings ({qty:,.0f} {d['unit']}"
+                + ("" if d["unit"] == "lf" else "s")
+                + ")"
+            ) if counted else f"read from the spec sheet ({qty:,.0f} {d['unit']})"
             if share > 0:
                 where += f" · {share * 100:,.0f}% of the job total by floor area"
-            out.append(build_line({
-                "building": g.get("building") or "Building A",
-                "unit": g.get("unit") or "Main",
-                "room": room,
-                "scope": "accessory",
-                "qty": round(qty, 2),
-                "unit_price": unit_price,
-                "labor_hours": round(qty * hr_each, 2),
-                "product": product,
-                "spec_note": ("From your accessory catalogue" if saved
-                              else "From the spec sheet trim schedule" if product else ""),
-                "source": where,
-                "review_note": g.get("note"),
-            }, job_id, labor_rate))
+            out.append(
+                build_line(
+                    {
+                        "building": g.get("building") or "Building A",
+                        "unit": g.get("unit") or "Main",
+                        "room": room,
+                        "scope": "accessory",
+                        "qty": round(qty, 2),
+                        "unit_price": unit_price,
+                        "labor_hours": round(qty * hr_each, 2),
+                        "product": product,
+                        "spec_note": (
+                            "From your accessory catalogue" if saved
+                            else "From the spec sheet trim schedule" if product
+                            else ""
+                        ),
+                        "source": where,
+                        "review_note": g.get("note"),
+                    },
+                    job_id,
+                    labor_rate,
+                )
+            )
     return out
 
 
@@ -581,13 +644,17 @@ def index_variance(parsed: dict[str, Any], measured_sqft: float, measured_units:
     s_sqft = stated.get("total_sqft") or parsed.get("stated_total_sqft")
     if s_units:
         delta = measured_units - int(s_units)
-        bits.append(f"index sheet states {int(s_units)} unit(s); we measured {measured_units}"
-                    + (f" ({delta:+d})" if delta else " — match"))
+        bits.append(
+            f"index sheet states {int(s_units)} unit(s); we measured {measured_units}"
+            + (f" ({delta:+d})" if delta else " — match")
+        )
     if s_sqft:
         delta_sf = measured_sqft - float(s_sqft)
         pct = (delta_sf / float(s_sqft) * 100) if float(s_sqft) else 0
-        bits.append(f"index sheet states {float(s_sqft):,.0f} sq ft; we measured {measured_sqft:,.0f}"
-                    f" ({delta_sf:+,.0f} sf, {pct:+.1f}%)")
+        bits.append(
+            f"index sheet states {float(s_sqft):,.0f} sq ft; we measured {measured_sqft:,.0f}"
+            f" ({delta_sf:+,.0f} sf, {pct:+.1f}%)"
+        )
     if stated.get("source"):
         bits.append(f"source: {stated['source']}")
     return " · ".join(bits)
