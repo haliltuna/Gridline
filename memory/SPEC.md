@@ -297,3 +297,17 @@ Test guidance: /app/auth_testing.md (seed a sessions row; OAuth itself is not sc
   classic_professional). Switching re-keys the iframe so the client-facing PDF re-renders in place;
   the open/download link uses the same template. Takeoff's page-level template select still drives
   the takeoff PDF.
+
+## Config template + boot-time config check (latest)
+- `backend/.env.example` is the committed template for every key the app reads, grouped into
+  required (MONGO_URL, DB_NAME, CORS_ORIGINS, APP_URL), AI (EMERGENT_LLM_KEY), billing
+  (STRIPE_SECRET_KEY / PUBLISHABLE / ACCOUNT_ID / WEBHOOK_SECRET / MODE), email (RESEND_API_KEY,
+  SENDER_EMAIL) and optional (APP_TZ), each with a comment saying what breaks without it. A fresh
+  clone copies it to `backend/.env`. `.gitignore` keeps real `.env` files out while whitelisting
+  `*.env.example` (negations sit at the END of the file — an earlier `*.env` block would otherwise
+  re-ignore them).
+- `backend/lib/config.py::check_config()` runs in the FastAPI lifespan and logs one readable report
+  at boot: ERROR lines for missing required keys (plus the copy/restart instruction) and WARNING
+  lines for optional ones naming the feature that switches off. The result is stored on
+  `app.state.config` and surfaced by `GET /api/health` as `{status, missing_required,
+  missing_optional, hint}` — key names only, never values.

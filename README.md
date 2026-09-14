@@ -74,6 +74,9 @@ FastAPI, async throughout. `python` is the app venv interpreter
   above its local imports, and `lib/db.py` self-loads it so standalone scripts
   inherit it too. The pod runs `mongod` locally, so `MONGO_URL` points at
   `localhost`. Add new secrets/config here; read them with `os.environ`.
+  `backend/.env.example` is the committed template listing every key and what
+  breaks without it — copy it to `backend/.env` on a fresh clone. `backend/lib/config.py`
+  reports missing keys at boot (and on `GET /api/health`, values never exposed).
 - **Dates**: `backend/lib/dates.py` — `today_iso(tz=None)`. The pod clock is
   UTC; anchor "today" server-side with this, never with client-side date math.
 - **Interactive check**: `cd /app/backend && python -c 'import server'` catches

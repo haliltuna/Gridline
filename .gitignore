@@ -95,3 +95,8 @@ android-sdk/
 credentials.json
 *.key
 .credentials
+
+# ...but the committed templates must stay in the repo so a fresh clone knows what to fill in.
+!.env.example
+!backend/.env.example
+!frontend/.env.example

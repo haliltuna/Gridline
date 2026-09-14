@@ -1,6 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, Request
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 import os
@@ -17,11 +17,15 @@ load_dotenv(ROOT_DIR / '.env')
 
 # MongoDB connection
 from lib.db import client, db, ensure_indexes
+from lib.config import check_config
 
 
 # Startup runs before the yield, shutdown after it. Add your own setup/teardown here.
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Say plainly at boot what is missing from backend/.env and which feature it turns off,
+    # instead of letting it surface as a confusing error on the first upload or checkout.
+    app.state.config = check_config()
     app.state.index_task = asyncio.create_task(ensure_indexes())  # background: a big index build must not block boot
     yield
     client.close()
@@ -47,6 +51,18 @@ class StatusCheckCreate(BaseModel):
 @api_router.get("/")
 async def root():
     return {"message": "Hello World"}
+
+@api_router.get("/health")
+async def health(request: Request):
+    """Liveness plus a redacted view of what configuration is missing (no values, ever)."""
+    cfg = getattr(request.app.state, "config", {"missing": [], "degraded": []})
+    return {
+        "status": "error" if cfg["missing"] else "ok",
+        "missing_required": cfg["missing"],
+        "missing_optional": cfg["degraded"],
+        "hint": "See backend/.env.example for what each key does." if (cfg["missing"] or cfg["degraded"]) else "",
+    }
+
 
 @api_router.post("/status", response_model=StatusCheck)
 async def create_status_check(input: StatusCheckCreate):
