@@ -25,8 +25,17 @@ from models.billing import CheckoutIn, CheckoutSession, ExitFeeCheckoutIn, Payme
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["payments"])
 
-stripe.api_key = os.environ.get("STRIPE_SECRET_KEY") or os.environ.get("STRIPE_API_KEY") or "sk_test_emergent"
+stripe.api_key = os.environ.get("STRIPE_SECRET_KEY") or os.environ.get("STRIPE_API_KEY") or ""
 WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+if not stripe.api_key:
+    logger.warning("STRIPE_SECRET_KEY is not set in backend/.env — checkout endpoints will 503")
+
+
+def _require_stripe() -> None:
+    """Never ship a fallback key: if the env is missing, say so instead of half-working."""
+    if not stripe.api_key:
+        raise HTTPException(status_code=503, detail=(
+            "Payments are not configured on this server — set STRIPE_SECRET_KEY in backend/.env."))
 
 # The sandbox account is in an SMP-supported country and the catalog is SaaS (digital), so
 # Stripe manages tax end to end. Client invoice payments are the contractor's own services
@@ -112,6 +121,7 @@ def _price_for(lookup_key: str):
 # ---------- plan checkout (authenticated, owner only) ----------
 @router.post("/payments/checkout", response_model=CheckoutSession)
 async def create_plan_checkout(body: CheckoutIn, user: dict = Depends(require("billing:write"))):
+    _require_stripe()
     pack = TOP_UP_BY_ID.get(body.plan_id)
     if pack:
         price = _price_for(pack["lookup_key"])
@@ -170,6 +180,7 @@ async def create_plan_checkout(body: CheckoutIn, user: dict = Depends(require("b
 # ---------- closing invoice for an early annual cancellation ----------
 @router.post("/payments/exit-fee/checkout", response_model=CheckoutSession)
 async def create_exit_fee_checkout(body: ExitFeeCheckoutIn, user: dict = Depends(require("billing:write"))):
+    _require_stripe()
     """A one-off Stripe Checkout for the single cancellation invoice. No subscription, no renewal."""
     acct = account_id(user)
     fee = await db.exit_invoices.find_one({"user_id": acct, "status": "unpaid"}, {"_id": 0},
@@ -212,6 +223,7 @@ async def create_exit_fee_checkout(body: ExitFeeCheckoutIn, user: dict = Depends
 # ---------- client invoice payment (public: the pay token is the credential) ----------
 @router.post("/pay/{pay_token}/checkout", response_model=CheckoutSession)
 async def create_invoice_checkout(pay_token: str, request: Request):
+    _require_stripe()
     inv = await db.invoices.find_one({"pay_token": pay_token}, {"_id": 0})
     if not inv:
         raise HTTPException(status_code=404, detail="That payment link is not valid")
