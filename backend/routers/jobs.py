@@ -176,12 +176,21 @@ async def upload_blueprint(job_id: str, file: UploadFile = File(...), user: dict
         for line in lines:
             line.update(apply_specs_to_line(line, job_specs))
     # Doors become transition strips, stair treads become nosings — counted, then priced.
+    # A saved accessory product wins on name and price, so trim lands named the way this
+    # contractor buys it; spec-sheet trim schedules fill in anything the drawings did not count.
+    acc_products = await db.products.find(
+        {"account_id": account_id(user), "kind": "accessory"}, {"_id": 0},
+    ).sort("times_used", -1).to_list(200)
+    catalogue: dict[str, dict] = {}
+    for prod in acc_products:
+        catalogue.setdefault(str(prod.get("accessory_kind") or ""), prod)
+    spec_rows = {str(a.get("kind")): a for a in (job.get("spec_accessories") or []) if isinstance(a, dict)}
     lines += build_accessory_lines(result, job_id, labor_rate, {
         "transition": float(settings.get("acc_transition_price") or 0),
         "tile_profile": float(settings.get("acc_tile_profile_price") or 0),
         "nosing": float(settings.get("acc_nosing_price") or 0),
         "cove_base": float(settings.get("acc_cove_base_price") or 0),
-    })
+    }, catalogue=catalogue, spec_rows=spec_rows)
     if lines:
         await db.takeoff_lines.insert_many([dict(line) for line in lines])
 

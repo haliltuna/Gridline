@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   AlertTriangle, Check, Plus, Trash2, FileSignature, Send, Ruler, ClipboardList,
-  Copy, GitCompare, FileDown, Sliders, Layers, Link2, Repeat, Lock,
+  Copy, GitCompare, FileDown, Sliders, Layers, Link2, Repeat, Lock, Eye,
 } from "lucide-react";
 import { apiDelete, apiGet, apiPatch, apiPost, ApiError } from "@/lib/api";
 import { uploadFile } from "@/lib/session";
@@ -129,6 +129,8 @@ export default function Takeoff() {
     onError: (e) => fail(e, "Add and approve some lines first"),
   });
   const [editQuoteId, setEditQuoteId] = useState<string | null>(null);
+  // Inline quote PDF — see the client's copy before emailing it.
+  const [previewQuoteId, setPreviewQuoteId] = useState<string | null>(null);
   const editQuoteLine = useMutation({
     mutationFn: ({ quoteId, lineId, patch }: { quoteId: string; lineId: string; patch: DocLinePatch }) =>
       apiPatch<Quote>(`/quotes/${quoteId}/lines/${lineId}`, patch),
@@ -810,7 +812,37 @@ export default function Takeoff() {
                       </Button>
                     </>
                   )}
+                  {canPdf && (
+                    <Button
+                      size="sm" variant="ghost" data-testid={`quote-preview-${q.id}`}
+                      onClick={() => setPreviewQuoteId(previewQuoteId === q.id ? null : q.id)}
+                    >
+                      <Eye className="h-3.5 w-3.5" /> {previewQuoteId === q.id ? "Hide PDF" : "Preview PDF"}
+                    </Button>
+                  )}
                 </div>
+                {previewQuoteId === q.id && canPdf && (
+                  <div className="w-full" data-testid={`quote-preview-panel-${q.id}`}>
+                    <div className="flex flex-wrap items-center justify-between gap-3 border border-hairline bg-surface-2 px-4 py-3">
+                      <p className="text-[15px] text-ink-3">
+                        Exactly what the client receives. Edit the lines and the preview re-renders
+                        before you email it.
+                      </p>
+                      <a href={pdfUrl(`/quotes/${q.id}/pdf`)} target="_blank" rel="noreferrer"
+                         data-testid={`quote-pdf-download-${q.id}`}
+                         className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-2")}>
+                        <FileDown className="h-3.5 w-3.5" /> Open / download
+                      </a>
+                    </div>
+                    <iframe
+                      key={`${q.id}-${q.total}-${q.lines.length}`}
+                      title={`Quote ${q.revision} preview`}
+                      data-testid={`quote-pdf-frame-${q.id}`}
+                      src={`${pdfUrl(`/quotes/${q.id}/pdf`)}#toolbar=0&view=FitH`}
+                      className="h-[620px] w-full border border-t-0 border-hairline bg-white"
+                    />
+                  </div>
+                )}
                 {editQuoteId === q.id && (
                   <div className="w-full">
                     <DocLineEditor

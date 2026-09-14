@@ -268,3 +268,17 @@ Test guidance: /app/auth_testing.md (seed a sessions row; OAuth itself is not sc
   `users.page_alert_period`) and is a no-op on unlimited plans. MOCKED to the backend console
   without `RESEND_API_KEY`.
 - Settings gained `acc_tile_profile_price` (default $9.50/lf).
+
+## Accessory auto-lines + quote PDF preview (latest)
+- `lib/ai.build_accessory_lines(parsed, job_id, labor_rate, prices, catalogue=, spec_rows=)`:
+  a saved accessory product (Products → Accessory catalogue, matched on `accessory_kind`, most-used
+  first) now wins on name, price and install hours; a spec-sheet trim row supplies the quantity when
+  the drawings counted nothing (only for the single whole-job group, so schedule totals are never
+  double-counted) and its product name otherwise. Each line records its provenance in `source`
+  ("counted from the drawings (6 doors)" / "read from the spec sheet (420 lf)").
+- `routers/jobs.py` upload passes the catalogue + `job.spec_accessories`, so every new takeoff lands
+  with its trim already priced. `routers/tools.py` spec-sheet upload inserts any trim line the
+  takeoff does not already have (matched on room label) and counts them in `applied_to_lines`.
+- Takeoff quote cards gained `Preview PDF` — the real quote PDF inline in an iframe (keyed on total
+  and line count so it re-renders after a line edit) plus an open/download link, gated on the `pdf`
+  capability exactly like the existing PDF link. Same pattern as the Invoices page preview.

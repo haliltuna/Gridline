@@ -90,6 +90,36 @@ async def upload_spec_sheet(job_id: str, file: UploadFile = File(...), user: dic
                 await db.takeoff_lines.update_one({"id": line["id"]}, {"$set": patch})
                 applied += 1
 
+    # Trim schedules the drawings never counted become their own accessory lines, priced from the
+    # saved catalogue where there is one, so nothing has to be added by hand afterwards.
+    added_acc = 0
+    if accessories:
+        settings = await db.settings.find_one({"user_id": account_id(user)}, {"_id": 0}) or {}
+        existing = await db.takeoff_lines.find(
+            {"job_id": job_id, "scope": "accessory"}, {"_id": 0, "room": 1},
+        ).to_list(500)
+        have = {str(r.get("room") or "") for r in existing}
+        acc_products = await db.products.find(
+            {"account_id": account_id(user), "kind": "accessory"}, {"_id": 0},
+        ).sort("times_used", -1).to_list(200)
+        catalogue: dict[str, dict] = {}
+        for prod in acc_products:
+            catalogue.setdefault(str(prod.get("accessory_kind") or ""), prod)
+        spec_rows = {str(a.get("kind")): a for a in accessories}
+        candidates = build_accessory_lines(
+            {"accessories": [{"building": "Building A", "unit": "Whole job"}]}, job_id,
+            float(settings.get("labor_rate", 58.0)),
+            {"transition": float(settings.get("acc_transition_price") or 0),
+             "tile_profile": float(settings.get("acc_tile_profile_price") or 0),
+             "nosing": float(settings.get("acc_nosing_price") or 0),
+             "cove_base": float(settings.get("acc_cove_base_price") or 0)},
+            catalogue=catalogue, spec_rows=spec_rows,
+        )
+        fresh = [c for c in candidates if c["room"] not in have]
+        if fresh:
+            await db.takeoff_lines.insert_many([dict(c) for c in fresh])
+            added_acc = len(fresh)
+
     await db.jobs.update_one({"id": job_id}, {"$set": {
         "specs": specs,
         "spec_accessories": accessories,
@@ -99,7 +129,8 @@ async def upload_spec_sheet(job_id: str, file: UploadFile = File(...), user: dic
     return SpecReadResult(
         specs=specs, accessories=[SpecAccessory(**a) for a in accessories],
         flags=[str(f) for f in result.get("flags", [])], brief=result.get("brief") or "",
-        engine=result.get("engine", ""), pages=int(result.get("pages") or 0), applied_to_lines=applied,
+        engine=result.get("engine", ""), pages=int(result.get("pages") or 0),
+        applied_to_lines=applied + added_acc,
     )
 
 

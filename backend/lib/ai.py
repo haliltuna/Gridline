@@ -461,20 +461,30 @@ def line_cost(line: dict[str, Any]) -> float:
 
 
 def build_accessory_lines(parsed: dict[str, Any], job_id: str, labor_rate: float,
-                          prices: dict[str, float] | None = None) -> list[dict[str, Any]]:
-    """Turn the AI's door, step and wall-base counts into priced accessory lines.
+                          prices: dict[str, float] | None = None,
+                          catalogue: dict[str, dict[str, Any]] | None = None,
+                          spec_rows: dict[str, dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+    """Turn the AI's door, step, wall-base and tile-profile counts into priced accessory lines.
 
-    `prices` is the account's own accessory catalogue (settings) keyed by kind; anything missing
-    falls back to the built-in defaults in lib/flooring.ACCESSORIES.
+    `prices` is the account's own accessory pricing (settings) keyed by kind; anything missing
+    falls back to the built-in defaults in lib/flooring.ACCESSORIES. `catalogue` is the saved
+    accessory product per kind (name, unit_price, labor_hr_each) — a saved product wins, so the
+    trim lands on the takeoff already named the way this contractor buys it. `spec_rows` are the
+    trim schedule rows read off the spec sheet, used as the quantity when the drawings counted
+    nothing and always as the product name.
     """
     groups = parsed.get("accessories") or []
     if not groups:
         totals = {"doors": int(parsed.get("doors") or 0), "steps": int(parsed.get("steps") or 0),
                   "cove_base_lf": float(parsed.get("cove_base_lf") or 0),
                   "tile_profile_lf": float(parsed.get("tile_profile_lf") or 0)}
-        if not any(totals.values()):
+        if not any(totals.values()) and not any(
+                float((r or {}).get("qty") or 0) > 0 for r in (spec_rows or {}).values()):
             return []
         groups = [{"building": "Building A", "unit": "Whole job", **totals}]
+    # Spec-sheet quantities only stand in when there is a single whole-job group; per-unit
+    # groups are trusted as-is so a schedule total is never double-counted.
+    single_group = len(groups) == 1
     out: list[dict[str, Any]] = []
     for g in groups:
         if not isinstance(g, dict):
@@ -483,11 +493,24 @@ def build_accessory_lines(parsed: dict[str, Any], job_id: str, labor_rate: float
                                 ("nosing", "steps", "Stair nosings — steps"),
                                 ("cove_base", "cove_base_lf", "Cove base — wall linear feet"),
                                 ("tile_profile", "tile_profile_lf", "Tile edge profiles — linear feet")):
+            spec = (spec_rows or {}).get(kind) or {}
             qty = float(g.get(key) or 0)
+            counted = qty > 0
+            if not counted and single_group:
+                # Nothing on the drawings for this trim, but the finish schedule printed a
+                # quantity — quote it rather than dropping the scope.
+                qty = float(spec.get("qty") or 0)
             if qty <= 0:
                 continue
             d = accessory_defaults(kind)
-            unit_price = float((prices or {}).get(kind) or d["unit_price"])
+            saved = (catalogue or {}).get(kind) or {}
+            unit_price = float(saved.get("unit_price") or 0) or float(spec.get("unit_price") or 0) \
+                or float((prices or {}).get(kind) or 0) or float(d["unit_price"])
+            hr_each = float(saved.get("labor_hr_each") or d["labor_hr_each"])
+            product = str(saved.get("name") or spec.get("product") or "")
+            where = (f"counted from the drawings ({qty:,.0f} {d['unit']}"
+                     + ("" if d["unit"] == "lf" else "s") + ")") if counted \
+                else f"read from the spec sheet ({qty:,.0f} {d['unit']})"
             out.append(build_line({
                 "building": g.get("building") or "Building A",
                 "unit": g.get("unit") or "Main",
@@ -495,9 +518,11 @@ def build_accessory_lines(parsed: dict[str, Any], job_id: str, labor_rate: float
                 "scope": "accessory",
                 "qty": round(qty, 2),
                 "unit_price": unit_price,
-                "labor_hours": round(qty * float(d["labor_hr_each"]), 2),
-                "source": f"counted from the drawings ({qty:,.0f} {d['unit']}"
-                          + ("" if d["unit"] == "lf" else "s") + ")",
+                "labor_hours": round(qty * hr_each, 2),
+                "product": product,
+                "spec_note": ("From your accessory catalogue" if saved
+                              else "From the spec sheet trim schedule" if product else ""),
+                "source": where,
                 "review_note": g.get("note"),
             }, job_id, labor_rate))
     return out
