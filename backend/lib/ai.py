@@ -22,7 +22,7 @@ from lib.flooring import FLOOR_TYPE_NAMES, accessory_defaults, adhesive_gallons,
 logger = logging.getLogger(__name__)
 
 # Anthropic's current Opus model. Change this one string to move to a newer revision.
-ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-4-5")
+ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-4-7")
 EMERGENT_MODEL = "claude-opus-4-5-20251101"
 
 MAX_PAGES_TO_READ = 12  # accuracy over speed; sets past 100 pages are sampled across the set
