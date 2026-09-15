@@ -38,7 +38,12 @@ ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-4-5")
 EMERGENT_MODEL = "claude-opus-4-5-20251101"
 
 MAX_PAGES_TO_READ = 12
-RENDER_SCALE = 3.5
+# Opus 4.7's vision encoder tops out at ~3.75 MP. A full A1 sheet at scale 3.5
+# produces ~8-12 MP — memory the model cannot use, and enough pressure on a
+# 512 MB container to crash the process. Cap the long edge so each page lands
+# around 2.2 MP after downscale.
+MAX_EDGE_PX = 2200
+RENDER_SCALE = 3.0
 
 
 SYSTEM = f"""You are a senior commercial flooring estimator reading architectural blueprints.
@@ -118,7 +123,14 @@ each product-to-room mapping. If there is no schedule, return "specs": []."""
 
 
 def render_pages(pdf_bytes: bytes) -> tuple[list[str], int]:
-    """Return (base64 JPEG pages, total page count)."""
+    """Return (base64 JPEG pages, total page count).
+
+    Each page is rendered and then downscaled so its long edge never exceeds
+    MAX_EDGE_PX. Without this cap, an A1 architectural sheet at scale 3.0 produces
+    a ~10,000 px image — larger than Opus can use, and enough memory pressure on a
+    512 MB container to crash the whole process. The cap keeps us inside the
+    vision encoder's real ceiling.
+    """
     doc = pdfium.PdfDocument(io.BytesIO(pdf_bytes))
     total = len(doc)
     if total <= MAX_PAGES_TO_READ:
@@ -126,11 +138,22 @@ def render_pages(pdf_bytes: bytes) -> tuple[list[str], int]:
     else:
         step = total / MAX_PAGES_TO_READ
         indices = sorted({int(i * step) for i in range(MAX_PAGES_TO_READ)})
+
     images: list[str] = []
     for i in indices:
         bitmap = doc[i].render(scale=RENDER_SCALE)
+        pil = bitmap.to_pil().convert("RGB")
+
+        # Enforce the long-edge cap. Anything larger is resized with LANCZOS so the
+        # downscale stays sharp — no aliasing on the dimension text.
+        long_edge = max(pil.size)
+        if long_edge > MAX_EDGE_PX:
+            ratio = MAX_EDGE_PX / long_edge
+            new_size = (int(pil.size[0] * ratio), int(pil.size[1] * ratio))
+            pil = pil.resize(new_size, resample=1)  # 1 == PIL.Image.LANCZOS
+
         buf = io.BytesIO()
-        bitmap.to_pil().convert("RGB").save(buf, format="JPEG", quality=88)
+        pil.save(buf, format="JPEG", quality=82, optimize=True)
         images.append(base64.b64encode(buf.getvalue()).decode())
     doc.close()
     return images, total
@@ -314,10 +337,6 @@ async def read_spec_sheet(pdf_bytes: bytes, filename: str) -> dict[str, Any]:
         return {"specs": [], "flags": [f"Could not read the spec sheet automatically: {exc}"], "brief": "", "engine": "fallback", "pages": total_pages}
 
 
-# ---------------------------------------------------------------------------
-# Profile lookups — the installer's wizard settings applied to every line
-# ---------------------------------------------------------------------------
-
 def _scope_for(raw_scope: str | None, profile: dict[str, Any] | None) -> str:
     if raw_scope and raw_scope in ("supply_install", "install_only", "supply_only", "misc", "accessory"):
         return raw_scope
@@ -343,14 +362,9 @@ def _waste_for(floor_type: str, profile: dict[str, Any] | None) -> float:
 
 
 def _material_rate_for(floor_type: str, profile: dict[str, Any] | None) -> float:
-    """Just the material portion of the rate, for the material_cost_per_sqft field."""
     country, region = _country_region(profile)
     return rate_for(floor_type, "supply_only", country, region)
 
-
-# ---------------------------------------------------------------------------
-# Spec matching (unchanged logic)
-# ---------------------------------------------------------------------------
 
 def _spec_matches(spec: dict[str, Any], line: dict[str, Any]) -> int:
     pattern = str(spec.get("room_pattern") or "").strip().lower()
@@ -406,10 +420,6 @@ def apply_specs_to_line(line: dict[str, Any], specs: list[dict[str, Any]],
     return patch
 
 
-# ---------------------------------------------------------------------------
-# Line construction
-# ---------------------------------------------------------------------------
-
 def build_line(raw: dict[str, Any], job_id: str, labor_rate: float,
                waste_overrides: dict[str, float] | None = None,
                profile: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -420,7 +430,6 @@ def build_line(raw: dict[str, Any], job_id: str, labor_rate: float,
     d = defaults_for(ft)
     sqft = float(raw.get("sqft") or 0) or round(float(raw.get("length_ft") or 0) * float(raw.get("width_ft") or 0), 1)
 
-    # Waste precedence: AI-read > legacy settings.waste_overrides > wizard waste_pct > industry default.
     if raw.get("waste_pct") is not None:
         waste = float(raw["waste_pct"])
     elif waste_overrides and ft in waste_overrides:
@@ -452,7 +461,6 @@ def build_line(raw: dict[str, Any], job_id: str, labor_rate: float,
             "source": raw.get("source"), "approved": False,
         }
 
-    # Material rate: spec-read price > regional material rate > industry fallback
     material = (float(raw["material_cost_per_sqft"]) if raw.get("material_cost_per_sqft") is not None
                 else _material_rate_for(ft, profile))
 
