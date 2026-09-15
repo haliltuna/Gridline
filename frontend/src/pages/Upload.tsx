@@ -97,18 +97,9 @@ export default function UploadPage() {
   const [estimate, setEstimate] = useState<PageEstimate | null>(null);
   const [estimating, setEstimating] = useState(false);
 
-  const pickBlueprint = (f: File | null) => {
-    pick(setFile)(f);
-    setEstimate(null);
-    if (!f || !f.name.toLowerCase().endsWith(".pdf")) return;
-    setEstimating(true);
-    const form = new FormData();
-    form.append("file", f);
-    void fetch("/api/jobs/estimate", { method: "POST", body: form, credentials: "include" })
-      .then(async (r) => {
-        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail ?? "Could not read that PDF");
-        setEstimate((await r.json()) as PageEstimate);
-      })
+      setEstimating(true);
+    void uploadFile<PageEstimate>("/jobs/estimate", f)
+      .then((r) => setEstimate(r))
       .catch((err: Error) => toast.error(err.message))
       .finally(() => setEstimating(false));
   };

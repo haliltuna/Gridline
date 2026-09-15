@@ -18,11 +18,19 @@ export async function endSession(redirectTo: string = "/login"): Promise<void> {
   }
 }
 
+// Uploads bypass the Vercel proxy on purpose. Vercel rejects request bodies over ~4.5 MB
+// with FUNCTION_PAYLOAD_TOO_LARGE, and blueprint sets routinely exceed that. JSON calls
+// stay on the relative /api prefix (small bodies, cached by Vercel); file uploads go
+// straight to the backend. In dev, the env var is unset and we fall back to /api so the
+// Vite proxy keeps working locally.
+const UPLOAD_BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "";
+
 // Multipart upload — the typed JSON helpers in lib/api.ts can't carry a FormData body.
 export async function uploadFile<T>(path: string, file: File): Promise<T> {
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch(`/api${path}`, { method: "POST", body: form, credentials: "include" });
+  const url = UPLOAD_BASE ? `${UPLOAD_BASE}/api${path}` : `/api${path}`;
+  const res = await fetch(url, { method: "POST", body: form, credentials: "include" });
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as { detail?: string } | null;
     throw new Error(body?.detail ?? `Upload failed (${res.status})`);
