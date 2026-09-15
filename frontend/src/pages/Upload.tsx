@@ -97,7 +97,11 @@ export default function UploadPage() {
   const [estimate, setEstimate] = useState<PageEstimate | null>(null);
   const [estimating, setEstimating] = useState(false);
 
-      setEstimating(true);
+  const pickBlueprint = (f: File | null) => {
+    pick(setFile)(f);
+    setEstimate(null);
+    if (!f || !f.name.toLowerCase().endsWith(".pdf")) return;
+    setEstimating(true);
     void uploadFile<PageEstimate>("/jobs/estimate", f)
       .then((r) => setEstimate(r))
       .catch((err: Error) => toast.error(err.message))
