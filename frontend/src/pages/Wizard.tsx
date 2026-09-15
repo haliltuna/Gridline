@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Check, Loader2, Sparkles, Layers, Grid3x3, Shuffle, Package,
-  Box, CircleDot, DoorOpen, CornerDownRight,
+  ArrowLeft, Check, Loader2, Sparkles, Layers, Grid3x3, Shuffle,
+  Package, Box, CircleDot, DoorOpen, CornerDownRight,
 } from "lucide-react";
 import { apiGet, apiPut } from "@/lib/api";
 import { FLOOR_TYPES } from "@/lib/types";
@@ -12,10 +12,6 @@ import Shell from "@/components/Shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
 
 type ChoiceOption = {
   value: string;
@@ -105,7 +101,6 @@ export default function Wizard() {
   const set = (patch: Partial<WizardProfile>) =>
     setAnswers((a) => (a ? { ...a, ...patch } : a));
 
-  // Auto-advance on single-choice cards
   const pickChoice = (id: string, value: string) => {
     set({ [id]: value } as unknown as Partial<WizardProfile>);
     setPulse(true);
@@ -117,7 +112,7 @@ export default function Wizard() {
 
   if (stepsQuery.isLoading || profileQuery.isLoading || !answers) {
     return (
-      <Shell title="Setting up">
+      <Shell title="Setting up" subtitle="Loading your defaults">
         <div className="flex items-center gap-3 text-ink-3">
           <Loader2 className="h-4 w-4 animate-spin text-brand" /> Loading your setup…
         </div>
@@ -127,7 +122,7 @@ export default function Wizard() {
 
   if (!step) {
     return (
-      <Shell title="All set">
+      <Shell title="All set" subtitle="Your defaults are saved">
         <Button size="lg" onClick={() => save.mutate()} disabled={save.isPending}>
           {save.isPending ? "Saving…" : "Go to upload"}
         </Button>
@@ -139,8 +134,7 @@ export default function Wizard() {
   const isLast = index === steps.length - 1;
 
   return (
-    <Shell>
-      {/* Ambient blueprint grid behind everything */}
+    <Shell title="Set up your defaults" subtitle="Six quick questions — nothing is locked in.">
       <div
         aria-hidden
         className="pointer-events-none fixed inset-0 -z-10 opacity-[0.08]"
@@ -154,7 +148,6 @@ export default function Wizard() {
       />
 
       <div className="mx-auto max-w-3xl">
-        {/* Progress readout */}
         <div className="mb-10">
           <div className="flex items-center justify-between font-mono text-[11px] uppercase tracking-[0.22em] text-ink-3">
             <span>{step.section}</span>
@@ -180,7 +173,6 @@ export default function Wizard() {
           </div>
         </div>
 
-        {/* The step */}
         <div key={step.id} className="gl-rise">
           <h2 className="font-heading text-[34px] font-semibold leading-[1.05] tracking-tight text-ink sm:text-[44px]">
             {step.title}
@@ -213,7 +205,6 @@ export default function Wizard() {
                 onApplyStandards={() => {
                   const key = step.field === "rate_per_sqft" ? "rates_per_sqft" : "waste_pct";
                   void apiGet<WizardProfile>("/wizard/profile").then((serverProfile) => {
-                    // Re-fetch defaults and overwrite — server holds the regional values.
                     set({ [key]: (serverProfile as unknown as Record<string, Record<string, number>>)[key] ?? {} } as unknown as Partial<WizardProfile>);
                     toast.success("Regional defaults applied");
                   });
@@ -233,7 +224,6 @@ export default function Wizard() {
           </div>
         </div>
 
-        {/* Nav */}
         <div className="mt-16 flex items-center justify-between gap-4">
           <button
             onClick={() => setIndex((i) => Math.max(0, i - 1))}
@@ -276,10 +266,6 @@ export default function Wizard() {
     </Shell>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
 
 function ChoiceCards({
   options, value, pulse, onChange,
@@ -355,7 +341,6 @@ function PerFloorTypeNumbers({
   const key = isRate ? "rates_per_sqft" : "waste_pct";
   const values = (answers as unknown as Record<string, Record<string, number>>)[key] ?? {};
 
-  // Filter to the floor types relevant to the chosen install focus.
   const focus = answers.default_install_method;
   const relevantTypes = useMemo(() => {
     if (focus === "mixed") return FLOOR_TYPES;
@@ -366,7 +351,6 @@ function PerFloorTypeNumbers({
         ft === "Natural Stone" || ft === "Epoxy / Resinous"
       );
     }
-    // click
     return FLOOR_TYPES.filter((ft) =>
       ft.startsWith("Click") || ft === "Laminate" || ft.includes("Nail") ||
       ft === "Broadloom Carpet" || ft === "Carpet Tile" || ft.includes("Tile")
@@ -488,10 +472,6 @@ function Toggles({
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Logic
-// ---------------------------------------------------------------------------
 
 function visibleFor(step: WizardStep, answers: WizardProfile | null): boolean {
   if (!answers) return true;
