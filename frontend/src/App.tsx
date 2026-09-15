@@ -19,6 +19,7 @@ import PaymentResult from "@/pages/PaymentResult";
 import Products from "@/pages/Products";
 import Approve from "@/pages/Approve";
 import NotFoundPage from "@/pages/NotFoundPage";
+import Wizard from "@/pages/Wizard";
 import ErrorBoundary from "@/components/ErrorBoundary";
 
 // One <Route> per page in src/pages; BrowserRouter already wraps this in main.tsx.
@@ -34,6 +35,7 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/upload" element={<UploadPage />} />
+        <Route path="/wizard" element={<Wizard />} />
         <Route path="/jobs/:jobId" element={<Takeoff />} />
         <Route path="/invoices" element={<Invoices />} />
         <Route path="/expenses" element={<Expenses />} />
