@@ -121,7 +121,9 @@ class Settings(BaseModel):
     tax_number: str = ""         # GST/HST/VAT/EIN as printed on documents
     # Your own waste % per floor type; anything missing uses the industry default
     waste_overrides: dict[str, float] = {}
-
+    # Wizard profile — the installer's defaults, saved once and editable from Settings.
+    # See lib/wizard_config.py for the definition of every field.
+    wizard_profile: dict = {}
 
 class SettingsIn(BaseModel):
     country: str
@@ -141,12 +143,68 @@ class SettingsIn(BaseModel):
     business_number: str = ""
     tax_number: str = ""
     waste_overrides: dict[str, float] = {}
-
+    waste_overrides: dict[str, float] = {}
+    wizard_profile: dict = {}
 
 class TaxDetect(BaseModel):
     tax_label: str
     tax_rate: float
 
+# ---------------------------------------------------------------------------
+# Wizard — the installer's defaults, saved per account and overridable per job.
+# ---------------------------------------------------------------------------
+
+class WizardProfile(BaseModel):
+    """The installer's answers from the setup wizard. Stored on Settings.
+
+    Every field has a default so an account that never ran the wizard still works —
+    it just uses the industry defaults that ship with lib/flooring.py.
+    """
+    default_scope: str = "supply_install"          # supply_install | install_only | supply_only
+    default_install_method: str = "glued"          # glued | click | floating | mixed
+    adhesive_supplied_by: str = "contractor"       # contractor | gc | not_required
+    transition_rule: str = "on_flooring_change"    # on_flooring_change | every_door
+    rates_per_sqft: dict[str, float] = {}          # {floor_type: $/sf the installer charges}
+    waste_pct: dict[str, float] = {}               # {floor_type: waste %}
+    extra_work_billed: dict[str, bool] = {}        # {extra_work_id: on/off}
+    completed: bool = False                        # True once the wizard has been finished
+
+
+class WizardProfileIn(BaseModel):
+    """What the frontend posts back when the wizard is saved."""
+    default_scope: str | None = None
+    default_install_method: str | None = None
+    adhesive_supplied_by: str | None = None
+    transition_rule: str | None = None
+    rates_per_sqft: dict[str, float] | None = None
+    waste_pct: dict[str, float] | None = None
+    extra_work_billed: dict[str, bool] | None = None
+    completed: bool | None = None
+
+
+class JobOverrides(BaseModel):
+    """Per-job overrides of the wizard profile. Saved on Job, not on Settings.
+
+    Empty by default — the wizard profile wins unless a field is set here.
+    """
+    scope: str | None = None                       # overrides default_scope for this job
+    install_method: str | None = None              # overrides default_install_method
+    adhesive_supplied_by: str | None = None
+    transition_rule: str | None = None
+    rates_per_sqft: dict[str, float] = {}          # {floor_type: $/sf} — merged onto profile
+    waste_pct: dict[str, float] = {}               # {floor_type: %} — merged onto profile
+    extra_work_billed: dict[str, bool] = {}        # merged onto profile
+
+
+class JobOverridesIn(BaseModel):
+    """What the frontend posts when saving per-job overrides."""
+    scope: str | None = None
+    install_method: str | None = None
+    adhesive_supplied_by: str | None = None
+    transition_rule: str | None = None
+    rates_per_sqft: dict[str, float] | None = None
+    waste_pct: dict[str, float] | None = None
+    extra_work_billed: dict[str, bool] | None = None
 
 class JobIn(BaseModel):
     name: str
@@ -187,6 +245,8 @@ class Job(BaseModel):
     spec_accessories: list[dict] = []
     index_stated: dict = {}
     index_variance: str = ""
+    # Per-job overrides of the wizard profile. Empty = use the account defaults.
+    overrides: dict = {}
     created_at: datetime = Field(default_factory=_now)
 
 

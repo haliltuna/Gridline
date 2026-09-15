@@ -1,20 +1,27 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { UploadCloud, FileText, Loader2, ClipboardList, X, FileSearch, Lock } from "lucide-react";
-import { apiPost, apiPut, ApiError } from "@/lib/api";
+import {
+  UploadCloud, FileText, Loader2, ClipboardList, X, FileSearch, Lock,
+  Sparkles, ScanLine, Ruler, Calculator, CheckCircle2,
+} from "lucide-react";
+import { apiGet, apiPost, apiPut, ApiError } from "@/lib/api";
 import { uploadFile } from "@/lib/session";
 import type { CheckoutSession, Job, PageEstimate, SpecEntry, SpecPriceItem, SpecReadResult } from "@/lib/types";
 import Shell, { Panel } from "@/components/Shell";
 import { CAP, usePlanCaps } from "@/lib/plan";
 import UsageMeter from "@/components/UsageMeter";
-import ScanSequence from "@/components/ScanSequence";
 import MaterialPricing from "@/components/MaterialPricing";
+import JobQuickCheck from "@/components/JobQuickCheck";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+
+// ---------------------------------------------------------------------------
+// Drop zone (unchanged from current file)
+// ---------------------------------------------------------------------------
 
 function Drop({
   file, onPick, testId, title, hint, icon: Icon, tall,
@@ -68,6 +75,132 @@ function Drop({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Read progress — fills the wait with real status, cycling through the phases
+// the backend actually executes: render → measure → trim → done.
+// ---------------------------------------------------------------------------
+
+const READ_PHASES = [
+  { icon: ScanLine,    label: "Rendering sheets",    detail: "Converting each page to a high-resolution image" },
+  { icon: Ruler,       label: "Reading dimensions",  detail: "Locking the printed scale and every written callout" },
+  { icon: Sparkles,    label: "Measuring rooms",     detail: "Building the room-by-room takeoff, unit by unit" },
+  { icon: Calculator,  label: "Pricing lines",       detail: "Applying your rates, waste factors and accessory catalogue" },
+  { icon: CheckCircle2,label: "Finalising",          detail: "Cross-checking against printed totals and flags" },
+];
+
+function ReadProgress({ filename, pageCount }: { filename: string; pageCount: number }) {
+  const [phase, setPhase] = useState(0);
+
+  useEffect(() => {
+    // Purely visual — advance every ~12s while the real request is in flight.
+    // When the response arrives the parent unmounts this and shows the takeoff.
+    const t = setInterval(() => setPhase((p) => Math.min(p + 1, READ_PHASES.length - 1)), 12000);
+    return () => clearInterval(t);
+  }, []);
+
+  const pct = Math.round(((phase + 0.5) / READ_PHASES.length) * 100);
+
+  return (
+    <div className="gl-rise">
+      {/* The readout */}
+      <div className="border border-hairline bg-surface">
+        <div className="flex items-center justify-between border-b border-hairline px-6 py-3">
+          <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-ink-3">
+            Reading · {filename}
+          </span>
+          <span className="font-mono text-[11px] text-ink-3">
+            {pageCount > 0 ? `${Math.min(pageCount, Math.max(1, Math.round((phase + 1) / READ_PHASES.length * pageCount)))} / ${pageCount}` : ""}
+          </span>
+        </div>
+
+        {/* Animated scan line across a light grid — the "futuristic readout" */}
+        <div className="relative h-[220px] overflow-hidden bg-surface-2">
+          <div className="absolute inset-0"
+               style={{
+                 backgroundImage: "linear-gradient(to right, rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.04) 1px, transparent 1px)",
+                 backgroundSize: "28px 28px",
+               }} />
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-brand/70"
+               style={{
+                 animation: "scan 3.2s ease-in-out infinite alternate",
+                 boxShadow: "0 0 18px 2px rgba(226,249,82,0.35)",
+               }} />
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-surface" />
+          <style>{`
+            @keyframes scan {
+              from { transform: translateY(0); }
+              to   { transform: translateY(218px); }
+            }
+          `}</style>
+
+          {/* Room outlines appearing one by one — a decorative nod to the takeoff forming */}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="grid grid-cols-3 gap-3 opacity-70">
+              {Array.from({ length: 9 }).map((_, i) => (
+                <div key={i}
+                     className="h-10 w-14 border border-brand/30"
+                     style={{
+                       opacity: i <= phase * 2 ? 1 : 0.15,
+                       transition: "opacity 800ms ease-out",
+                     }} />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Phase list */}
+        <div className="divide-y divide-hairline">
+          {READ_PHASES.map((p, i) => {
+            const done = i < phase;
+            const active = i === phase;
+            const Icon = p.icon;
+            return (
+              <div key={p.label}
+                   className={cn(
+                     "flex items-start gap-4 px-6 py-3 transition-colors",
+                     active && "bg-brand/5",
+                   )}>
+                <span className={cn(
+                  "mt-0.5 grid h-6 w-6 place-items-center border",
+                  done ? "border-brand/60 bg-brand/10 text-brand"
+                       : active ? "border-brand text-brand"
+                                : "border-hairline text-ink-4",
+                )}>
+                  {done ? <CheckCircle2 className="h-3.5 w-3.5" />
+                        : active ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                 : <Icon className="h-3.5 w-3.5" />}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className={cn("font-heading text-[15px] font-semibold",
+                                   done || active ? "text-ink" : "text-ink-3")}>
+                    {p.label}
+                  </p>
+                  <p className="mt-0.5 text-[14px] text-ink-3">{p.detail}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Progress bar */}
+        <div className="border-t border-hairline px-6 py-4">
+          <div className="h-[3px] w-full bg-surface-2">
+            <div className="h-full bg-brand transition-all duration-1000 ease-out"
+                 style={{ width: `${pct}%` }} />
+          </div>
+          <p className="mt-3 text-center font-mono text-[12px] text-ink-3">
+            A large set can take a minute or two. You can leave this tab — the read continues on the server.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Upload page
+// ---------------------------------------------------------------------------
+
 export default function UploadPage() {
   const [name, setName] = useState("");
   const [client, setClient] = useState("");
@@ -77,10 +210,11 @@ export default function UploadPage() {
   const [spec, setSpec] = useState<File | null>(null);
   const { can, planName } = usePlanCaps();
   const canSpec = can(CAP.spec);
-  // Spec-first flow: the finish schedule is read (and priced) BEFORE the drawings are measured.
   const [pendingJob, setPendingJob] = useState<Job | null>(null);
   const [specs, setSpecs] = useState<SpecEntry[]>([]);
   const [pricingSaved, setPricingSaved] = useState(false);
+  const [estimate, setEstimate] = useState<PageEstimate | null>(null);
+  const [estimating, setEstimating] = useState(false);
   const navigate = useNavigate();
   const qc = useQueryClient();
 
@@ -91,11 +225,6 @@ export default function UploadPage() {
     }
     setter(f);
   };
-
-  // Page estimate: count the set and show what it will consume BEFORE we spend any AI
-  // budget, so nobody is surprised by what a read costs them.
-  const [estimate, setEstimate] = useState<PageEstimate | null>(null);
-  const [estimating, setEstimating] = useState(false);
 
   const pickBlueprint = (f: File | null) => {
     pick(setFile)(f);
@@ -125,7 +254,6 @@ export default function UploadPage() {
     return job;
   };
 
-  // Step 1 of the spec-first flow — read the schedule on its own, then prompt for pricing.
   const readSpec = useMutation({
     mutationFn: async () => {
       if (!spec) throw new Error("Choose the spec sheet first");
@@ -155,11 +283,22 @@ export default function UploadPage() {
     onError: () => toast.error("Could not save that pricing"),
   });
 
+  // Ensure the job exists before the quick-check screen shows (it needs a job_id for overrides)
+  const [quickCheckJob, setQuickCheckJob] = useState<Job | null>(null);
+  const prepareQuickCheck = async () => {
+    if (!file) return;
+    try {
+      const job = await ensureJob();
+      setQuickCheckJob(job);
+    } catch {
+      toast.error("Could not create the job");
+    }
+  };
+
   const run = useMutation({
     mutationFn: async () => {
       if (!file) throw new Error("Choose a blueprint PDF first");
-      const job = await ensureJob();
-      // Spec sheet first, drawings second: the products ride into the measuring pass.
+      const job = quickCheckJob ?? (await ensureJob());
       if (spec && specs.length === 0) {
         try {
           const res = await uploadFile<SpecReadResult>(`/jobs/${job.id}/spec-sheet`, spec);
@@ -173,30 +312,24 @@ export default function UploadPage() {
     },
     onSuccess: (job) => {
       setPendingJob(null);
+      setQuickCheckJob(null);
       void qc.invalidateQueries({ queryKey: ["jobs"] });
       void qc.invalidateQueries({ queryKey: ["stats"] });
       toast.success("Takeoff ready — review and approve");
       navigate(`/jobs/${job.id}`);
     },
     onError: (e: Error) => {
-      // A 402 means the plan ran out of pages/jobs — surface the upgrade message itself.
       const detail = e instanceof ApiError ? (e.body as { detail?: string })?.detail : null;
       toast.error(detail ?? e.message, detail ? { duration: 9000 } : undefined);
     },
   });
 
+  const isReading = run.isPending;
+
   return (
     <Shell title="New takeoff" subtitle="Drop the blueprint in. Add the spec sheet too and we'll match products to rooms.">
-      {run.isPending ? (
-        <div className="gl-rise">
-          <ScanSequence running filename={file?.name ?? "blueprint.pdf"} />
-          <Panel className="mt-6 text-center">
-            <p className="text-lg text-ink-2" data-testid="upload-progress-note">
-              Reading the printed scale and every written dimension. Accuracy over speed — a large set can take a minute or two.
-            </p>
-            <p className="mt-2 font-mono text-sm text-ink-3">Leave this page open.</p>
-          </Panel>
-        </div>
+      {isReading ? (
+        <ReadProgress filename={file?.name ?? "blueprint.pdf"} pageCount={estimate?.pages ?? 0} />
       ) : (
         <div className="grid gap-6 lg:grid-cols-[1.25fr_0.75fr]">
           <div className="space-y-5">
@@ -252,6 +385,12 @@ export default function UploadPage() {
                 )}
               </div>
             )}
+
+            {/* Per-job quick-check — appears once a PDF is picked and fits */}
+            {file && estimate?.fits && quickCheckJob && (
+              <JobQuickCheck jobId={quickCheckJob.id} onReady={() => run.mutate()} />
+            )}
+
             <div>
               <div className="mb-3 flex items-center gap-2">
                 <ClipboardList className="h-4 w-4 text-brand" />
@@ -275,33 +414,33 @@ export default function UploadPage() {
                 </div>
               ) : (
                 <>
-              <Drop
-                file={spec} onPick={pick(setSpec)} testId="spec-dropzone" icon={ClipboardList}
-                title="Add the product schedule"
-                hint="We'll read which product goes in which room, including backsplashes"
-              />
-              {spec && specs.length === 0 && (
-                <Button
-                  variant="outline" className="mt-3 w-full font-semibold"
-                  data-testid="spec-first-button" disabled={readSpec.isPending}
-                  onClick={() => readSpec.mutate()}
-                >
-                  {readSpec.isPending
-                    ? (<><Loader2 className="h-4 w-4 animate-spin" /> Reading the schedule…</>)
-                    : "Read the spec sheet first & price materials"}
-                </Button>
-              )}
-              {specs.length > 0 && (
-                <div className="mt-4">
-                  <MaterialPricing
-                    specs={specs}
-                    saved={pricingSaved}
-                    pending={savePricing.isPending}
-                    onSave={(items) => savePricing.mutate(items)}
-                    onSkip={() => setPricingSaved(true)}
+                  <Drop
+                    file={spec} onPick={pick(setSpec)} testId="spec-dropzone" icon={ClipboardList}
+                    title="Add the product schedule"
+                    hint="We'll read which product goes in which room, including backsplashes"
                   />
-                </div>
-              )}
+                  {spec && specs.length === 0 && (
+                    <Button
+                      variant="outline" className="mt-3 w-full font-semibold"
+                      data-testid="spec-first-button" disabled={readSpec.isPending}
+                      onClick={() => readSpec.mutate()}
+                    >
+                      {readSpec.isPending
+                        ? (<><Loader2 className="h-4 w-4 animate-spin" /> Reading the schedule…</>)
+                        : "Read the spec sheet first & price materials"}
+                    </Button>
+                  )}
+                  {specs.length > 0 && (
+                    <div className="mt-4">
+                      <MaterialPricing
+                        specs={specs}
+                        saved={pricingSaved}
+                        pending={savePricing.isPending}
+                        onSave={(items) => savePricing.mutate(items)}
+                        onSkip={() => setPricingSaved(true)}
+                      />
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -310,7 +449,7 @@ export default function UploadPage() {
           <Panel className="h-fit">
             <h2 className="font-heading text-lg font-semibold text-ink">Job details</h2>
             <form className="mt-5 space-y-4" data-testid="upload-form"
-                  onSubmit={(e) => { e.preventDefault(); run.mutate(); }}>
+                  onSubmit={(e) => { e.preventDefault(); void prepareQuickCheck(); }}>
               <div className="space-y-2">
                 <Label htmlFor="jobname" className="text-ink-2">Job name</Label>
                 <Input id="jobname" data-testid="upload-jobname-input" value={name}
@@ -333,10 +472,10 @@ export default function UploadPage() {
               </div>
               <Button type="submit" size="lg" className="w-full font-semibold" data-testid="upload-submit-button"
                       disabled={!file || estimating || (estimate ? !estimate.fits : false)}>
-                {run.isPending ? (<><Loader2 className="h-4 w-4 animate-spin" /> Reading…</>)
+                {estimating ? "Counting the set…"
                   : estimate && !estimate.fits ? "Not enough pages left"
-                  : estimate ? `Read ${estimate.pages} page${estimate.pages === 1 ? "" : "s"}`
-                  : "Read blueprint"}
+                  : estimate ? `Continue — ${estimate.pages} page${estimate.pages === 1 ? "" : "s"}`
+                  : "Continue"}
               </Button>
               <p className="text-center text-sm text-ink-3">
                 You approve every line before anything becomes a quote.

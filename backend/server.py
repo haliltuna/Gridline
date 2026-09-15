@@ -97,7 +97,7 @@ from routers.team import router as team_router  # noqa: E402
 from routers.products import router as products_router
 from routers.approvals import router as approvals_router
 from routers.tools import router as tools_router  # noqa: E402
-
+from routers.wizard import router as wizard_router
 # CORS must be registered BEFORE the routers are mounted, and with an exact origin
 # match (no wildcard) because allow_credentials=True is required for the session cookie.
 cors_origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()]
@@ -122,7 +122,7 @@ api_router.include_router(approvals_router)
 api_router.include_router(team_router)
 api_router.include_router(finance_router)
 api_router.include_router(payments_router)
-
+api_router.include_router(wizard_router)
 app.include_router(api_router)
 
 # Configure logging
