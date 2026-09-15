@@ -19,8 +19,6 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Palette tokens. Every page uses these (bg-surface, text-ink, border-hairline,
-   text-brand …) instead of hard-coded hex, so a theme swap repaints the whole app. */
 @theme inline {
     --font-heading: var(--f-heading);
     --font-sans: var(--f-sans);
@@ -79,7 +77,7 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* ---------- THEME 1: Readout (default) — near-black + neon yellow ---------- */
+/* ---------- THEME 1: Blueprint (default) — near-black + neon yellow ---------- */
 :root,
 [data-theme="readout"] {
     --f-heading: 'Chakra Petch', 'Space Grotesk Variable', sans-serif;
@@ -135,56 +133,59 @@
     --sidebar-ring: var(--t-brand);
 }
 
-/* ---------- THEME 2: Blueprint — deep indigo + cyan drafting ink ---------- */
-[data-theme="blueprint"] {
-    --f-heading: 'Syne Variable', 'Archivo Variable', sans-serif;
-    --f-sans: 'Inter Tight Variable', sans-serif;
-    --f-mono: 'IBM Plex Mono', monospace;
+/* ---------- THEME 2: iOS — true black + system blue, SF Pro stack, native feel ---------- */
+[data-theme="ios"] {
+    /* System font stack — renders as SF Pro on iOS and Mac, Segoe UI Variable on Windows,
+       Inter on Linux. Every one is a humanist, iOS-native face. No @import needed. */
+    --f-heading: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI Variable Display', 'Inter', sans-serif;
+    --f-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI Variable Text', 'Inter', sans-serif;
+    --f-mono: 'SF Mono', ui-monospace, 'JetBrains Mono Variable', monospace;
 
-    --t-base: #060A16;
-    --t-base-2: #080F22;
-    --t-surface: #0C152C;
-    --t-surface-2: #111E3C;
-    --t-hairline: #1D2C50;
-    --t-ink: #EAF2FF;
-    --t-ink-2: #C3D4F0;
-    --t-ink-3: #8FA6CC;
-    --t-ink-4: #5E739A;
-    --t-brand: #5BE9E0;
-    --t-brand-soft: #06242A;
-    --t-on-brand: #04121A;
-    --t-grid: rgba(38, 62, 110, 0.6);
-    --t-glow: 91, 233, 224;
+    /* iOS Dark Mode system palette. */
+    --t-base: #000000;          /* systemBackground */
+    --t-base-2: #0A0A0A;
+    --t-surface: #1C1C1E;       /* secondarySystemBackground */
+    --t-surface-2: #2C2C2E;     /* tertiarySystemBackground */
+    --t-hairline: #38383A;      /* separator */
+    --t-ink: #FFFFFF;           /* label */
+    --t-ink-2: #EBEBF5;         /* secondaryLabel (99% white) */
+    --t-ink-3: #8E8E93;         /* tertiaryLabel (systemGray) */
+    --t-ink-4: #636366;         /* quaternaryLabel */
+    --t-brand: #0A84FF;         /* systemBlue (dark) */
+    --t-brand-soft: rgba(10, 132, 255, 0.15);
+    --t-on-brand: #FFFFFF;
+    --t-grid: rgba(255, 255, 255, 0.03);
+    --t-glow: 10, 132, 255;
 
     --background: var(--t-base);
     --foreground: var(--t-ink);
     --card: var(--t-surface);
     --card-foreground: var(--t-ink);
-    --popover: var(--t-surface-2);
+    --popover: var(--t-surface);
     --popover-foreground: var(--t-ink);
     --primary: var(--t-brand);
     --primary-foreground: var(--t-on-brand);
-    --secondary: #15254A;
+    --secondary: #2C2C2E;
     --secondary-foreground: var(--t-ink-2);
     --muted: var(--t-surface-2);
     --muted-foreground: var(--t-ink-3);
     --accent: var(--t-brand-soft);
     --accent-foreground: var(--t-brand);
-    --destructive: #FB7185;
+    --destructive: #FF453A;     /* systemRed (dark) */
     --border: var(--t-hairline);
-    --input: #1B2C52;
+    --input: #2C2C2E;
     --ring: var(--t-brand);
-    --chart-1: var(--t-brand);
-    --chart-2: #818CF8;
-    --chart-3: #34D399;
-    --chart-4: #FBBF24;
-    --chart-5: var(--t-ink-3);
-    --radius: 0.15rem;
-    --sidebar: var(--t-base-2);
+    --chart-1: #0A84FF;
+    --chart-2: #30D158;         /* systemGreen */
+    --chart-3: #FF9F0A;         /* systemOrange */
+    --chart-4: #BF5AF2;         /* systemPurple */
+    --chart-5: #8E8E93;
+    --radius: 1rem;             /* 16px — the iOS card radius */
+    --sidebar: var(--t-surface);
     --sidebar-foreground: var(--t-ink-2);
     --sidebar-primary: var(--t-brand);
     --sidebar-primary-foreground: var(--t-on-brand);
-    --sidebar-accent: #15254A;
+    --sidebar-accent: var(--t-surface-2);
     --sidebar-accent-foreground: var(--t-brand);
     --sidebar-border: var(--t-hairline);
     --sidebar-ring: var(--t-brand);
@@ -255,8 +256,22 @@
   * {
     @apply border-border outline-ring/50;
     }
-  /* Typed text must always carry the theme ink — inputs inherit from odd
-     ancestors otherwise, and browser autofill repaints white-on-white. */
+
+  /* Radius propagation — cards, buttons, inputs, popovers, dialogs all read the
+     theme's --radius. iOS = 16px soft corners, Blueprint = near-sharp, Daylight = 8px. */
+  [data-slot="button"],
+  [data-slot="input"],
+  [data-slot="textarea"],
+  [data-slot="select-trigger"],
+  [data-slot="card"],
+  [data-slot="popover-content"],
+  [data-slot="dialog-content"],
+  [data-slot="dropdown-menu-content"] {
+    border-radius: var(--radius);
+    }
+
+  /* Typed text must always carry the theme ink — inputs inherit from odd ancestors
+     otherwise, and browser autofill repaints white-on-white. */
   input, textarea, select {
     color: var(--t-ink);
     caret-color: var(--t-brand);
@@ -282,10 +297,42 @@
   body {
     @apply bg-background text-foreground;
     }
+
+  /* Ambient blueprint grid — subtle, visible, and only in the two technical themes.
+     iOS stays clean. Fixed attachment so it doesn't scroll. The colour comes from
+     each theme's own --t-grid token, so Blueprint shows slate lines and Daylight
+     shows faint ink-blue lines. */
+  html[data-theme="readout"] body,
+  html[data-theme="daylight"] body {
+    background-image:
+      linear-gradient(var(--t-grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--t-grid) 1px, transparent 1px);
+    background-size: 48px 48px;
+    background-attachment: fixed;
+    }
+
   html {
     @apply font-sans;
-    /* only colour/typography tokens animate — never `all` */
     transition: background-color 180ms ease, color 180ms ease;
+    }
+
+  /* Native-feeling headers in the iOS theme: heavier weights, tighter tracking,
+     slightly larger type — the SF Pro Display look that iOS uses for screen titles. */
+  html[data-theme="ios"] h1,
+  html[data-theme="ios"] h2,
+  html[data-theme="ios"] h3 {
+    font-weight: 700;
+    letter-spacing: -0.022em;
+    }
+  html[data-theme="ios"] h1 { font-size: 2rem; line-height: 1.15; }
+  html[data-theme="ios"] h2 { font-size: 1.5rem; line-height: 1.2; }
+
+  /* iOS buttons: no visible border on the primary button, pill-like press feedback. */
+  html[data-theme="ios"] [data-slot="button"] {
+    transition: transform 140ms cubic-bezier(0.34, 1.56, 0.64, 1), background-color 140ms ease, opacity 140ms ease;
+    }
+  html[data-theme="ios"] [data-slot="button"]:active {
+    transform: scale(0.96);
     }
 }
 
