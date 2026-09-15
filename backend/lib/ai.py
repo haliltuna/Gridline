@@ -1,13 +1,15 @@
 """Blueprint reading engine: PDF pages -> high-res PNG -> Claude Opus vision -> takeoff lines.
 
-Uses the official Anthropic SDK when ANTHROPIC_API_KEY is set (the deployment path).
-Falls back to Emergent's integration proxy when only EMERGENT_LLM_KEY is present.
-Falls back to deterministic demo lines when neither key exists, so the upload flow is
-never dead-ended by a missing credential.
+Uses the official Anthropic SDK when ANTHROPIC_API_KEY is set. Falls back to Emergent's
+integration proxy when only EMERGENT_LLM_KEY is present. Falls back to deterministic demo
+lines when neither key exists, so the upload flow is never dead-ended.
 
 Every build_* function accepts a `profile` dict — the merged wizard profile from
-routers/wizard.py. When the profile is empty, the industry defaults in lib/flooring.py
-apply, so the file still works for any code path that hasn't been updated yet.
+routers/wizard.py. When the profile is empty, industry defaults from lib/flooring.py apply.
+
+Since each floor type is now ONE install method (Click Vinyl Plank vs Glue Down Vinyl Plank
+are separate entries), pricing goes through rate_for() which handles scope, region, and
+pattern multipliers in one place.
 """
 
 import base64
@@ -25,14 +27,13 @@ from lib.flooring import (
     FLOOR_TYPE_NAMES,
     accessory_defaults,
     adhesive_gallons,
-    defaults_for,
-    install_methods_for,
     adhesive_required,
+    defaults_for,
+    rate_for,
 )
 
 logger = logging.getLogger(__name__)
 
-# Anthropic's current Opus model. Change this one string to move to a newer revision.
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-4-5")
 EMERGENT_MODEL = "claude-opus-4-5-20251101"
 
@@ -74,18 +75,15 @@ STEP 2b — COUNT THE TRIM WORK.
  * doors: every door opening / doorway in the scope
  * steps: every stair tread / step
  * stair_runs: number of separate stair runs
- * tile_profile_lf: linear feet of tile edge profile / trim — every exposed tile edge,
-   outside corner, threshold or transition where tile meets another finish
+ * tile_profile_lf: linear feet of tile edge profile / trim
  * cove_base_lf: linear feet of wall base / cove base — measure the room perimeter and
    SUBTRACT the door openings (about 3 ft each). Only count rooms whose finish gets a
-   wall base (typically resilient, VCT and tile rooms, not carpeted bedrooms).
-Report them per unit in "accessories" AND as project totals. Count what you can actually
-see; if a sheet is unreadable say so in flags instead of guessing.
+   wall base.
+Report them per unit in "accessories" AND as project totals.
 
 STEP 2c — THE INDEX / COVER SHEET.
-The first few sheets often state the project totals. Record exactly what is printed in
-"index_stated" so we can show the difference between the drawing's own numbers and what
-was measured. Use null for anything not printed. Never copy a stated number into a room.
+Record exactly what is printed in "index_stated". Use null for anything not printed.
+Never copy a stated number into a room measurement.
 
 Return STRICT JSON only, no prose, no markdown fence:
 {{
@@ -96,24 +94,23 @@ Return STRICT JSON only, no prose, no markdown fence:
  "index_stated": {{"buildings": <int or null>, "units": <int or null>, "total_sqft": <number or null>, "source": "sheet name/number or null"}},
  "doors": <int total door openings>,
  "steps": <int total stair treads>,
- "cove_base_lf": <number, total linear feet of wall base>,
- "tile_profile_lf": <number, total linear feet of tile edge profile / trim>,
+ "cove_base_lf": <number>,
+ "tile_profile_lf": <number>,
  "accessories": [{{"building":"Building A","unit":"Unit 101","doors":4,"steps":0, "cove_base_lf":128.5,"tile_profile_lf":22.0,"note":null}}],
  "cross_check_note": "string or null",
  "flags": ["anything blurry/unreadable/assumed"],
  "brief": "2-3 sentence plain-English summary",
  "specs": [
-   {{"room_pattern":"Kitchen Backsplash","surface":"wall","floor_type":"Ceramic Tile", "product":"exact manufacturer + product + colour + code as printed", "adhesive":"printed setting material or null","unit_type":null,"note":null}}
+   {{"room_pattern":"Kitchen Backsplash","surface":"wall","floor_type":"Ceramic Tile", "product":"exact product as printed", "adhesive":"printed setting material or null","unit_type":null,"note":null}}
  ],
  "lines": [
-   {{"building":"Building A","unit":"Unit 101","room":"Living Room", "floor_type":"Luxury Vinyl Plank","length_ft":18.0,"width_ft":14.0,"sqft":252.0, "product":"specified product if named, else null", "source":"written dimension 18'-0\\" x 14'-0\\"","needs_review":false,"review_note":null}}
+   {{"building":"Building A","unit":"Unit 101","room":"Living Room", "floor_type":"Click Vinyl Plank","length_ft":18.0,"width_ft":14.0,"sqft":252.0, "product":"specified product if named, else null", "source":"written dimension 18'-0\\" x 14'-0\\"","needs_review":false,"review_note":null}}
  ]
 }}
 
 STEP 2d — NAME THE PRODUCT, NOT THE CATEGORY.
-Every supply line must carry the BRANDED product from the drawings' own finish schedule.
-Copy manufacturer + series + colour + item code exactly. Only leave "product" empty when
-the drawings genuinely print no product name — then add a flag. Never invent a brand.
+Every supply line must carry the BRANDED product from the drawings' finish schedule.
+Copy manufacturer + series + colour + item code exactly. Never invent a brand.
 
 STEP 3 — SPECS IF PRESENT.
 If this set has a finish schedule or keynote legend naming products, fill "specs" with
@@ -238,11 +235,11 @@ async def read_blueprint(
 
 def _fallback(filename: str, pages: int) -> dict[str, Any]:
     rooms = [
-        ("Unit 101", "Living Room", "Luxury Vinyl Plank", 18.0, 14.0),
+        ("Unit 101", "Living Room", "Click Vinyl Plank", 18.0, 14.0),
         ("Unit 101", "Bedroom 1", "Carpet Tile", 12.0, 11.5),
         ("Unit 101", "Bathroom 1", "Porcelain Tile", 8.0, 6.0),
         ("Unit 101", "Kitchen Backsplash", "Ceramic Tile", 12.0, 1.5),
-        ("Unit 102", "Living Room", "Luxury Vinyl Plank", 17.0, 13.5),
+        ("Unit 102", "Living Room", "Click Vinyl Plank", 17.0, 13.5),
         ("Unit 102", "Bedroom 1", "Carpet Tile", 12.5, 11.0),
         ("Unit 102", "Bathroom 1", "Porcelain Tile", 7.5, 6.0),
     ]
@@ -273,7 +270,7 @@ SPEC_SYSTEM = (
 Extract every product-to-location mapping you can read.
 
 Rules:
-- FLOORING SCOPE ONLY. Take flooring, wall/backsplash tile, stair nosings, transitions, cove base, underlayment and setting materials. IGNORE paint, wallcovering, millwork, countertops, plumbing.
+- FLOORING SCOPE ONLY. Take flooring, wall/backsplash tile, stair nosings, transitions, cove base, underlayment and setting materials.
 - If the schedule names an approved alternative / "or equal" product, record it in "alternative".
 - Copy manufacturer, product name/series, colour and item code EXACTLY as printed.
 - room_pattern is the room or area the product applies to. Use "ALL" for a project-wide default.
@@ -281,7 +278,7 @@ Rules:
     + ", ".join(FLOOR_TYPE_NAMES)
     + """
 - Include wall tile / backsplash entries — mark those with surface "wall".
-- Also read ACCESSORY / TRIM schedules if present. Record kind EXACTLY as: transition, nosing, cove_base, tile_profile — with qty and its unit ("ea" or "lf").
+- Also read ACCESSORY / TRIM schedules if present. Record kind EXACTLY as: transition, nosing, cove_base, tile_profile — with qty and its unit.
 
 Return STRICT JSON only:
 {
@@ -316,6 +313,44 @@ async def read_spec_sheet(pdf_bytes: bytes, filename: str) -> dict[str, Any]:
         logger.error("spec sheet read failed: %s", exc)
         return {"specs": [], "flags": [f"Could not read the spec sheet automatically: {exc}"], "brief": "", "engine": "fallback", "pages": total_pages}
 
+
+# ---------------------------------------------------------------------------
+# Profile lookups — the installer's wizard settings applied to every line
+# ---------------------------------------------------------------------------
+
+def _scope_for(raw_scope: str | None, profile: dict[str, Any] | None) -> str:
+    if raw_scope and raw_scope in ("supply_install", "install_only", "supply_only", "misc", "accessory"):
+        return raw_scope
+    if profile and profile.get("default_scope"):
+        return profile["default_scope"]
+    return "supply_install"
+
+
+def _country_region(profile: dict[str, Any] | None) -> tuple[str, str]:
+    if not profile:
+        return ("Canada", "Alberta")
+    return (profile.get("country") or "Canada", profile.get("region") or "Alberta")
+
+
+def _waste_for(floor_type: str, profile: dict[str, Any] | None) -> float:
+    d = defaults_for(floor_type)
+    fallback = float(d.get("waste") or 10)
+    if not profile:
+        return fallback
+    waste = profile.get("waste_pct") or {}
+    v = waste.get(floor_type)
+    return float(v) if v not in (None, "") else fallback
+
+
+def _material_rate_for(floor_type: str, profile: dict[str, Any] | None) -> float:
+    """Just the material portion of the rate, for the material_cost_per_sqft field."""
+    country, region = _country_region(profile)
+    return rate_for(floor_type, "supply_only", country, region)
+
+
+# ---------------------------------------------------------------------------
+# Spec matching (unchanged logic)
+# ---------------------------------------------------------------------------
 
 def _spec_matches(spec: dict[str, Any], line: dict[str, Any]) -> int:
     pattern = str(spec.get("room_pattern") or "").strip().lower()
@@ -358,77 +393,40 @@ def apply_specs_to_line(line: dict[str, Any], specs: list[dict[str, Any]],
     ft = best.get("floor_type")
     if ft in FLOOR_TYPE_NAMES and line.get("scope") != "misc":
         patch["floor_type"] = ft
-        method = _install_method_for(ft, profile)
         d = defaults_for(ft)
-        waste = _waste_for(ft, profile, d["waste"])
+        waste = _waste_for(ft, profile)
         patch["waste_pct"] = float(waste)
-        patch["material_cost_per_sqft"] = _rate_for(ft, profile, d["material"])
+        patch["material_cost_per_sqft"] = _material_rate_for(ft, profile)
         total_sqft = float(line["sqft"]) * (1 + float(waste) / 100)
-        patch["adhesive"] = best.get("adhesive") or d["adhesive"]
-        patch["adhesive_gallons"] = adhesive_gallons(ft, total_sqft, install_method=method)
+        patch["adhesive"] = best.get("adhesive") or d.get("adhesive") or ""
+        patch["adhesive_gallons"] = adhesive_gallons(ft, total_sqft)
         patch["labor_hours"] = round(total_sqft / 100 * float(d["labor_hr_per_100sqft"]), 2)
     elif best.get("adhesive") and line.get("scope") != "misc":
         patch["adhesive"] = best["adhesive"]
     return patch
 
 
-def _rate_for(floor_type: str, profile: dict[str, Any] | None, fallback: float) -> float:
-    if not profile:
-        return float(fallback)
-    rates = profile.get("rates_per_sqft") or {}
-    v = rates.get(floor_type)
-    return float(v) if v not in (None, "") else float(fallback)
-
-
-def _waste_for(floor_type: str, profile: dict[str, Any] | None, fallback: float) -> float:
-    if not profile:
-        return float(fallback)
-    waste = profile.get("waste_pct") or {}
-    v = waste.get(floor_type)
-    return float(v) if v not in (None, "") else float(fallback)
-
-
-def _install_method_for(floor_type: str, profile: dict[str, Any] | None) -> str:
-    valid = install_methods_for(floor_type)
-    if not profile:
-        return valid[0]
-    method = profile.get("default_install_method") or "glued"
-    if method == "mixed":
-        return "glued" if "glued" in valid else valid[0]
-    return method if method in valid else valid[0]
-
-
-def _adhesive_visible(floor_type: str, profile: dict[str, Any] | None) -> bool:
-    if profile and profile.get("adhesive_supplied_by") in ("gc", "not_required"):
-        return False
-    method = _install_method_for(floor_type, profile)
-    return adhesive_required(floor_type, method)
-
-
-def _scope_for(raw_scope: str | None, profile: dict[str, Any] | None) -> str:
-    if raw_scope and raw_scope in ("supply_install", "install_only", "supply_only", "misc", "accessory"):
-        return raw_scope
-    if profile and profile.get("default_scope"):
-        return profile["default_scope"]
-    return "supply_install"
-
+# ---------------------------------------------------------------------------
+# Line construction
+# ---------------------------------------------------------------------------
 
 def build_line(raw: dict[str, Any], job_id: str, labor_rate: float,
                waste_overrides: dict[str, float] | None = None,
                profile: dict[str, Any] | None = None) -> dict[str, Any]:
     scope = _scope_for(raw.get("scope"), profile)
-    ft = raw.get("floor_type") or "Luxury Vinyl Plank"
+    ft = raw.get("floor_type") or "Click Vinyl Plank"
     if ft not in FLOOR_TYPE_NAMES:
-        ft = "Luxury Vinyl Plank"
+        ft = "Click Vinyl Plank"
     d = defaults_for(ft)
     sqft = float(raw.get("sqft") or 0) or round(float(raw.get("length_ft") or 0) * float(raw.get("width_ft") or 0), 1)
 
+    # Waste precedence: AI-read > legacy settings.waste_overrides > wizard waste_pct > industry default.
     if raw.get("waste_pct") is not None:
         waste = float(raw["waste_pct"])
     elif waste_overrides and ft in waste_overrides:
         waste = float(waste_overrides[ft])
     else:
-        waste = _waste_for(ft, profile, d["waste"])
+        waste = _waste_for(ft, profile)
 
     total_sqft = round(sqft * (1 + waste / 100), 1)
     qty = float(raw.get("qty") or 0)
@@ -454,11 +452,11 @@ def build_line(raw: dict[str, Any], job_id: str, labor_rate: float,
             "source": raw.get("source"), "approved": False,
         }
 
+    # Material rate: spec-read price > regional material rate > industry fallback
     material = (float(raw["material_cost_per_sqft"]) if raw.get("material_cost_per_sqft") is not None
-                else _rate_for(ft, profile, d["material"]))
+                else _material_rate_for(ft, profile))
 
-    method = _install_method_for(ft, profile)
-    show_adhesive = _adhesive_visible(ft, profile)
+    show_adhesive = bool(d.get("adhesive_required", True))
 
     return {
         "id": str(uuid.uuid4()), "job_id": job_id,
@@ -474,9 +472,9 @@ def build_line(raw: dict[str, Any], job_id: str, labor_rate: float,
         "sqft": 0.0 if scope == "misc" else sqft,
         "waste_pct": 0.0 if scope == "misc" else waste,
         "adhesive": ("" if scope in ("misc", "install_only") or not show_adhesive
-                     else (raw.get("adhesive") or d["adhesive"])),
+                     else (raw.get("adhesive") or d.get("adhesive") or "")),
         "adhesive_gallons": (0.0 if scope in ("misc", "install_only") or not show_adhesive
-                             else adhesive_gallons(ft, total_sqft, install_method=method)),
+                             else adhesive_gallons(ft, total_sqft)),
         "material_cost_per_sqft": 0.0 if scope == "misc" else material,
         "labor_hours": 0.0 if scope == "misc" else round(total_sqft / 100 * float(d["labor_hr_per_100sqft"]), 2),
         "labor_rate": labor_rate,
