@@ -11,6 +11,7 @@ from lib.db import db
 from lib.flooring import adhesive_gallons, defaults_for
 from lib.plan_gate import needs_cap
 from lib.pricing import CAP_EDIT, plan_for
+from routers.wizard import _merge_profile
 from lib.usage_alerts import maybe_alert_usage
 from models.billing import PageEstimate
 from models.schemas import Job, JobIn, LineCreate, LineUpdate, TakeoffLine
@@ -22,6 +23,16 @@ def _with_cost(doc: dict) -> TakeoffLine:
     doc = {k: v for k, v in doc.items() if k != "_id"}
     doc["cost"] = line_cost(doc)
     return TakeoffLine(**doc)
+
+async def _profile_for_job(job: dict, user: dict) -> dict:
+    """The merged wizard profile for this job — account defaults + per-job overrides.
+
+    Read once per upload and passed into every build_line / build_accessory_lines call,
+    so the takeoff pricing matches what the installer set up in the wizard.
+    """
+    settings = await db.settings.find_one({"user_id": account_id(user)}, {"_id": 0}) or {}
+    return _merge_profile(settings.get("wizard_profile") or {}, job.get("overrides") or {})
+
 
 
 async def _job_or_404(job_id: str, user_id: str) -> dict:
@@ -169,15 +180,17 @@ async def upload_blueprint(request: Request, job_id: str, file: UploadFile = Fil
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Could not read that PDF: {exc}") from exc
 
-    settings = await db.settings.find_one({"user_id": account_id(user)}, {"_id": 0}) or {}
-    labor_rate = float(settings.get("labor_rate", 58.0))
+settings = await db.settings.find_one({"user_id": account_id(user)}, {"_id": 0}) or {}
+labor_rate = float(settings.get("labor_rate", 58.0))
+# Merged wizard profile — drives rate, waste, scope, adhesive, and transition rules.
+profile = await _profile_for_job(job, user)
 
     await db.takeoff_lines.delete_many({"job_id": job_id})
     waste_overrides = {k: float(v) for k, v in (settings.get("waste_overrides") or {}).items()}
-    lines = [build_line(r, job_id, labor_rate, waste_overrides) for r in result["lines"]]
+    lines = [build_line(r, job_id, labor_rate, waste_overrides, profile=profile) for r in result["lines"]]
     if job_specs:
-        for line in lines:
-            line.update(apply_specs_to_line(line, job_specs))
+    for line in lines:
+        line.update(apply_specs_to_line(line, job_specs, profile=profile))
     # Doors become transition strips, stair treads become nosings — counted, then priced.
     # A saved accessory product wins on name and price, so trim lands named the way this
     # contractor buys it; spec-sheet trim schedules fill in anything the drawings did not count.
@@ -201,7 +214,7 @@ async def upload_blueprint(request: Request, job_id: str, file: UploadFile = Fil
         "nosing": float(settings.get("acc_nosing_price") or 0),
         "cove_base": float(settings.get("acc_cove_base_price") or 0),
     }, catalogue=catalogue, spec_rows=spec_rows,
-        unit_weights=[(b, u, sq) for (b, u), sq in weights.items()])
+        unit_weights=[(b, u, sq) for (b, u), sq in weights.items()], profile=profile)
     if lines:
         await db.takeoff_lines.insert_many([dict(line) for line in lines])
 
