@@ -98,6 +98,21 @@ from routers.products import router as products_router
 from routers.approvals import router as approvals_router
 from routers.tools import router as tools_router  # noqa: E402
 
+# CORS must be registered BEFORE the routers are mounted, and with an exact origin
+# match (no wildcard) because allow_credentials=True is required for the session cookie.
+cors_origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()]
+if not cors_origins:
+    cors_origins = ["*"]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_credentials=True,
+    allow_origins=cors_origins,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+)
+
 api_router.include_router(auth_router)
 api_router.include_router(google_auth_router)
 api_router.include_router(jobs_router)
@@ -108,16 +123,7 @@ api_router.include_router(team_router)
 api_router.include_router(finance_router)
 api_router.include_router(payments_router)
 
-# Include the router in the main app
 app.include_router(api_router)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 # Configure logging
 logging.basicConfig(
