@@ -63,19 +63,16 @@ def cookie_kwargs() -> dict:
     # page. SameSite=None fixes that, and the spec requires Secure alongside it.
     # Fall back to Lax only for plain-http local access.
     #
-    # COOKIE_DOMAIN scopes the cookie to the ROOT domain (.gridreader.com) so both
-    # subdomains share it. Without this, the cookie is scoped to api.gridreader.com
-    # only, and Chrome's third-party cookie blocking drops it on requests from
-    # app.gridreader.com even when SameSite=None is set.
+    # domain=.gridreader.com scopes the cookie to the ROOT domain, so the browser
+    # sends it to both app.gridreader.com (frontend) and api.gridreader.com (backend).
+    # Without it, the cookie lands on api.gridreader.com only, and the browser refuses
+    # to send it from the app subdomain — which is what caused the 401 on uploads.
     https = os.environ.get("APP_URL", "").startswith("https")
-    kwargs = {
+    return {
         "httponly": True,
         "samesite": "none" if https else "lax",
         "secure": https,
         "max_age": SESSION_DAYS * 24 * 3600,
         "path": "/",
+        "domain": ".gridreader.com" if https else None,
     }
-    cookie_domain = os.environ.get("COOKIE_DOMAIN", "").strip()
-    if cookie_domain:
-        kwargs["domain"] = cookie_domain
-    return kwargs
