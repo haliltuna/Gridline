@@ -2,10 +2,10 @@
 
 Uses the official Anthropic SDK when ANTHROPIC_API_KEY is set (the deployment path).
 Falls back to Emergent's integration proxy when only EMERGENT_LLM_KEY is present (works
-inside Emergent's preview). Falls back to deterministic demo lines when neither key exists,
-so the upload flow is never dead-ended by a missing credential.
+inside Emergent's preview). Falls back to deterministic demo lines when neither key
+exists, so the upload flow is never dead-ended by a missing credential.
 
-Every build_* function now accepts a `profile` dict — the merged wizard profile from
+Every build_* function accepts a `profile` dict — the merged wizard profile from
 routers/wizard.py. When the profile is empty, the industry defaults in lib/flooring.py
 apply, so the file still works for any code path that hasn't been updated yet.
 """
