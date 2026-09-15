@@ -56,16 +56,26 @@ async def current_user(gl_session: str | None = Cookie(default=None)) -> dict:
 
 
 def cookie_kwargs() -> dict:
-    # The preview is rendered inside a CROSS-SITE IFRAME. A SameSite=Lax cookie is not
-    # sent on requests from such a frame, so login "succeeds" and the very next
-    # /auth/me comes back 401 — the user is stuck on the sign-in page. SameSite=None
-    # is what makes the session usable in an embedded preview, and the spec requires
-    # Secure alongside it. Fall back to Lax only for plain-http local access.
+    # The preview is rendered inside a CROSS-SITE IFRAME, and production runs the
+    # frontend on app.gridreader.com and the backend on api.gridreader.com. A
+    # SameSite=Lax cookie is not sent on cross-site requests, so login "succeeds"
+    # and the very next /auth/me comes back 401 — the user is stuck on the sign-in
+    # page. SameSite=None fixes that, and the spec requires Secure alongside it.
+    # Fall back to Lax only for plain-http local access.
+    #
+    # COOKIE_DOMAIN scopes the cookie to the ROOT domain (.gridreader.com) so both
+    # subdomains share it. Without this, the cookie is scoped to api.gridreader.com
+    # only, and Chrome's third-party cookie blocking drops it on requests from
+    # app.gridreader.com even when SameSite=None is set.
     https = os.environ.get("APP_URL", "").startswith("https")
-    return {
+    kwargs = {
         "httponly": True,
         "samesite": "none" if https else "lax",
         "secure": https,
         "max_age": SESSION_DAYS * 24 * 3600,
         "path": "/",
     }
+    cookie_domain = os.environ.get("COOKIE_DOMAIN", "").strip()
+    if cookie_domain:
+        kwargs["domain"] = cookie_domain
+    return kwargs
