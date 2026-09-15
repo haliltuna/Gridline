@@ -1,11 +1,15 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useEffect, type ReactNode } from "react";
-import { LayoutGrid, Upload, FileText, Receipt, Settings as Cog, CreditCard, LogOut, Activity, Users, TrendingDown, Inbox, Library } from "lucide-react";
+import {
+  LayoutGrid, Upload, FileText, Receipt, Settings as Cog, CreditCard,
+  LogOut, Activity, Users, TrendingDown, Inbox, Library,
+} from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { endSession } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import ThemeSwitcher from "@/components/ThemeSwitcher";
 import HealthBanner from "@/components/HealthBanner";
+import MobileNav from "@/components/MobileNav";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -24,10 +28,10 @@ const NAV = [
 export function Logo({ className }: { className?: string }) {
   return (
     <span className={cn("inline-flex items-center gap-2 font-heading font-bold tracking-tight", className)}>
-      <span className="grid h-7 w-7 place-items-center border border-brand/40 bg-brand-soft text-brand">
+      <span className="grid h-7 w-7 place-items-center rounded-lg border border-brand/40 bg-brand-soft text-brand">
         <Activity className="h-4 w-4" />
       </span>
-      <span className="text-ink">GRID<span className="text-brand">LINE</span></span>
+      <span className="text-ink">GRID<span className="text-brand">READER</span></span>
     </span>
   );
 }
@@ -38,9 +42,6 @@ export default function Shell({ children, title, subtitle, action }: {
   const { user, loading, signedOut, unreachable } = useAuth();
   const navigate = useNavigate();
 
-  // Redirect ONLY on a confirmed 401. While loading, or when /auth/me is unreachable,
-  // stay put and render the shell — bouncing on an unknown state is what made sign-in
-  // look stuck.
   useEffect(() => {
     if (signedOut) navigate("/login", { replace: true });
   }, [signedOut, navigate]);
@@ -49,7 +50,7 @@ export default function Shell({ children, title, subtitle, action }: {
     return (
       <div className="grid min-h-screen place-items-center bg-background" data-testid="shell-loading">
         <div className="flex items-center gap-3 font-mono text-sm uppercase tracking-[0.2em] text-brand">
-          <span className="h-2 w-2 animate-pulse bg-brand" /> Loading Gridline…
+          <span className="h-2 w-2 animate-pulse bg-brand" /> Loading Gridreader…
         </div>
       </div>
     );
@@ -58,9 +59,11 @@ export default function Shell({ children, title, subtitle, action }: {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="sticky top-0 z-40 border-b border-hairline/80 bg-canvas/90 backdrop-blur">
-        <div className="mx-auto flex max-w-[1400px] items-center gap-6 px-5 py-3">
+        <div className="mx-auto flex max-w-[1400px] items-center gap-3 px-4 py-3 sm:gap-6 sm:px-5">
           <Link to="/dashboard" data-testid="shell-logo-link"><Logo /></Link>
-          <nav className="flex flex-1 flex-wrap items-center gap-1">
+
+          {/* Desktop nav only — hidden on mobile, replaced by the bottom tab bar */}
+          <nav className="hidden flex-1 flex-wrap items-center gap-1 md:flex">
             {NAV.map((n) => (
               <NavLink
                 key={n.id}
@@ -68,7 +71,7 @@ export default function Shell({ children, title, subtitle, action }: {
                 data-testid={`nav-${n.id}-link`}
                 className={({ isActive }) =>
                   cn(
-                    "inline-flex items-center gap-2 border border-transparent px-3 py-2 text-sm font-medium text-ink-3 transition-colors hover:border-hairline hover:text-ink",
+                    "inline-flex items-center gap-2 rounded-lg border border-transparent px-3 py-2 text-sm font-medium text-ink-3 transition-colors hover:border-hairline hover:text-ink",
                     isActive && "border-brand/40 bg-brand-soft text-brand",
                   )
                 }
@@ -78,7 +81,11 @@ export default function Shell({ children, title, subtitle, action }: {
               </NavLink>
             ))}
           </nav>
-          <div className="flex items-center gap-3">
+
+          {/* Mobile spacer so the logo stays left and the icons stay right */}
+          <div className="flex-1 md:hidden" />
+
+          <div className="flex items-center gap-2 sm:gap-3">
             <ThemeSwitcher compact />
             <span className="hidden items-center gap-2 sm:flex" data-testid="shell-user-identity">
               {user?.picture ? (
@@ -97,12 +104,13 @@ export default function Shell({ children, title, subtitle, action }: {
                   {(user?.name || user?.email || "?").trim().charAt(0)}
                 </span>
               )}
-              <span className="text-sm font-medium text-ink-2" data-testid="shell-user-email">
+              <span className="hidden text-sm font-medium text-ink-2 lg:inline" data-testid="shell-user-email">
                 {user?.name || user?.email || ""}
               </span>
             </span>
             <Button variant="ghost" size="sm" data-testid="logout-button" onClick={() => void endSession()}>
-              <LogOut className="h-4 w-4" /> Sign out
+              <LogOut className="h-4 w-4" />
+              <span className="hidden sm:inline">Sign out</span>
             </Button>
           </div>
         </div>
@@ -110,31 +118,40 @@ export default function Shell({ children, title, subtitle, action }: {
 
       {unreachable && (
         <div className="border-b border-amber-500/40 bg-amber-500/10 px-5 py-2.5 text-center text-sm text-amber-200" data-testid="shell-offline-banner">
-          Can't reach the Gridline server right now — your data will reappear when the connection is back.
+          Can't reach the Gridreader server right now — your data will reappear when the connection is back.
         </div>
       )}
 
       <HealthBanner />
 
-      <main className="mx-auto max-w-[1400px] px-5 py-8">
-        <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+      {/* pb-24 on mobile leaves room for the floating tab bar; desktop keeps the plain py-8 */}
+      <main className="mx-auto max-w-[1400px] px-4 pb-24 pt-6 sm:px-5 md:pb-8 md:pt-8">
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-4 md:mb-8">
           <div>
-            <h1 className="font-heading text-3xl font-bold tracking-tight text-ink" data-testid="page-title">
+            <h1 className="font-heading text-2xl font-bold tracking-tight text-ink md:text-3xl" data-testid="page-title">
               {title}
             </h1>
-            {subtitle && <p className="mt-1 text-base text-ink-3">{subtitle}</p>}
+            {subtitle && <p className="mt-1 text-[15px] text-ink-3 md:text-base">{subtitle}</p>}
           </div>
           {action}
         </div>
         {children}
       </main>
+
+      <MobileNav />
     </div>
   );
 }
 
 export function Panel({ children, className, testId }: { children: ReactNode; className?: string; testId?: string }) {
   return (
-    <div data-testid={testId} className={cn("border border-hairline/80 bg-surface p-5 transition-colors hover:border-hairline", className)}>
+    <div
+      data-testid={testId}
+      className={cn(
+        "rounded-2xl border border-hairline/80 bg-surface p-5 transition-colors hover:border-hairline",
+        className,
+      )}
+    >
       {children}
     </div>
   );
@@ -168,7 +185,7 @@ export function StatusBadge({ status, testId }: { status: string; testId?: strin
     <span
       data-testid={testId}
       className={cn(
-        "inline-flex items-center border px-2.5 py-1 font-mono text-[11px] uppercase tracking-[0.15em]",
+        "inline-flex items-center rounded-full border px-2.5 py-1 font-mono text-[11px] uppercase tracking-[0.15em]",
         STATUS_STYLES[status] ?? "border-hairline text-ink-3",
       )}
     >
