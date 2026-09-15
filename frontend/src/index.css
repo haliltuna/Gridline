@@ -133,25 +133,22 @@
     --sidebar-ring: var(--t-brand);
 }
 
-/* ---------- THEME 2: iOS — true black + system blue, SF Pro stack, native feel ---------- */
+/* ---------- THEME 2: iOS — true black, SF Pro, Liquid Glass ---------- */
 [data-theme="ios"] {
-    /* System font stack — renders as SF Pro on iOS and Mac, Segoe UI Variable on Windows,
-       Inter on Linux. Every one is a humanist, iOS-native face. No @import needed. */
     --f-heading: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI Variable Display', 'Inter', sans-serif;
     --f-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI Variable Text', 'Inter', sans-serif;
     --f-mono: 'SF Mono', ui-monospace, 'JetBrains Mono Variable', monospace;
 
-    /* iOS Dark Mode system palette. */
-    --t-base: #000000;          /* systemBackground */
+    --t-base: #000000;
     --t-base-2: #0A0A0A;
-    --t-surface: #1C1C1E;       /* secondarySystemBackground */
-    --t-surface-2: #2C2C2E;     /* tertiarySystemBackground */
-    --t-hairline: #38383A;      /* separator */
-    --t-ink: #FFFFFF;           /* label */
-    --t-ink-2: #EBEBF5;         /* secondaryLabel (99% white) */
-    --t-ink-3: #8E8E93;         /* tertiaryLabel (systemGray) */
-    --t-ink-4: #636366;         /* quaternaryLabel */
-    --t-brand: #0A84FF;         /* systemBlue (dark) */
+    --t-surface: #1C1C1E;
+    --t-surface-2: #2C2C2E;
+    --t-hairline: #38383A;
+    --t-ink: #FFFFFF;
+    --t-ink-2: #EBEBF5;
+    --t-ink-3: #8E8E93;
+    --t-ink-4: #636366;
+    --t-brand: #0A84FF;
     --t-brand-soft: rgba(10, 132, 255, 0.15);
     --t-on-brand: #FFFFFF;
     --t-grid: rgba(255, 255, 255, 0.03);
@@ -171,16 +168,16 @@
     --muted-foreground: var(--t-ink-3);
     --accent: var(--t-brand-soft);
     --accent-foreground: var(--t-brand);
-    --destructive: #FF453A;     /* systemRed (dark) */
+    --destructive: #FF453A;
     --border: var(--t-hairline);
     --input: #2C2C2E;
     --ring: var(--t-brand);
     --chart-1: #0A84FF;
-    --chart-2: #30D158;         /* systemGreen */
-    --chart-3: #FF9F0A;         /* systemOrange */
-    --chart-4: #BF5AF2;         /* systemPurple */
+    --chart-2: #30D158;
+    --chart-3: #FF9F0A;
+    --chart-4: #BF5AF2;
     --chart-5: #8E8E93;
-    --radius: 1rem;             /* 16px — the iOS card radius */
+    --radius: 1.25rem;
     --sidebar: var(--t-surface);
     --sidebar-foreground: var(--t-ink-2);
     --sidebar-primary: var(--t-brand);
@@ -257,21 +254,7 @@
     @apply border-border outline-ring/50;
     }
 
-  /* Radius propagation — cards, buttons, inputs, popovers, dialogs all read the
-     theme's --radius. iOS = 16px soft corners, Blueprint = near-sharp, Daylight = 8px. */
-  [data-slot="button"],
-  [data-slot="input"],
-  [data-slot="textarea"],
-  [data-slot="select-trigger"],
-  [data-slot="card"],
-  [data-slot="popover-content"],
-  [data-slot="dialog-content"],
-  [data-slot="dropdown-menu-content"] {
-    border-radius: var(--radius);
-    }
-
-  /* Typed text must always carry the theme ink — inputs inherit from odd ancestors
-     otherwise, and browser autofill repaints white-on-white. */
+  /* Typed text must always carry the theme ink. */
   input, textarea, select {
     color: var(--t-ink);
     caret-color: var(--t-brand);
@@ -297,11 +280,12 @@
   body {
     @apply bg-background text-foreground;
     }
+  html {
+    @apply font-sans;
+    transition: background-color 180ms ease, color 180ms ease;
+    }
 
-  /* Ambient blueprint grid — subtle, visible, and only in the two technical themes.
-     iOS stays clean. Fixed attachment so it doesn't scroll. The colour comes from
-     each theme's own --t-grid token, so Blueprint shows slate lines and Daylight
-     shows faint ink-blue lines. */
+  /* ---------- Blueprint + Daylight: ambient blueprint grid, subtle ---------- */
   html[data-theme="readout"] body,
   html[data-theme="daylight"] body {
     background-image:
@@ -311,13 +295,23 @@
     background-attachment: fixed;
     }
 
-  html {
-    @apply font-sans;
-    transition: background-color 180ms ease, color 180ms ease;
+  /* ============================================================
+     iOS theme only — everything below applies ONLY under
+     [data-theme="ios"]. Other themes are untouched.
+     ============================================================ */
+
+  html[data-theme="ios"] [data-slot="button"],
+  html[data-theme="ios"] [data-slot="input"],
+  html[data-theme="ios"] [data-slot="textarea"],
+  html[data-theme="ios"] [data-slot="select-trigger"],
+  html[data-theme="ios"] [data-slot="card"],
+  html[data-theme="ios"] [data-slot="popover-content"],
+  html[data-theme="ios"] [data-slot="dialog-content"],
+  html[data-theme="ios"] [data-slot="dropdown-menu-content"],
+  html[data-theme="ios"] [data-slot="sheet-content"] {
+    border-radius: var(--radius);
     }
 
-  /* Native-feeling headers in the iOS theme: heavier weights, tighter tracking,
-     slightly larger type — the SF Pro Display look that iOS uses for screen titles. */
   html[data-theme="ios"] h1,
   html[data-theme="ios"] h2,
   html[data-theme="ios"] h3 {
@@ -327,12 +321,57 @@
   html[data-theme="ios"] h1 { font-size: 2rem; line-height: 1.15; }
   html[data-theme="ios"] h2 { font-size: 1.5rem; line-height: 1.2; }
 
-  /* iOS buttons: no visible border on the primary button, pill-like press feedback. */
-  html[data-theme="ios"] [data-slot="button"] {
-    transition: transform 140ms cubic-bezier(0.34, 1.56, 0.64, 1), background-color 140ms ease, opacity 140ms ease;
+  /* Cards and panels: no border, soft layered shadow. Apple shadows are felt
+     before they are seen — two stacked shadows, both very low opacity. */
+  html[data-theme="ios"] .gl-panel,
+  html[data-theme="ios"] [data-slot="card"],
+  html[data-theme="ios"] [data-slot="popover-content"],
+  html[data-theme="ios"] [data-slot="dialog-content"],
+  html[data-theme="ios"] [data-slot="sheet-content"] {
+    border-color: transparent;
+    background-color: var(--t-surface);
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.28),
+      0 8px 24px -12px rgba(0, 0, 0, 0.42);
     }
-  html[data-theme="ios"] [data-slot="button"]:active {
+
+  html[data-theme="ios"] .border-hairline {
+    border-color: rgba(255, 255, 255, 0.05);
+    }
+  html[data-theme="ios"] .bg-surface.border,
+  html[data-theme="ios"] .bg-surface-2.border {
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.28),
+      0 8px 24px -12px rgba(0, 0, 0, 0.42);
+    border-color: transparent;
+    }
+
+  html[data-theme="ios"] .gl-glass {
+    background-color: rgba(28, 28, 30, 0.72);
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    border-color: rgba(255, 255, 255, 0.06);
+    }
+
+  html[data-theme="ios"] [data-slot="button"][data-variant="ghost"],
+  html[data-theme="ios"] [data-slot="button"][data-variant="outline"] {
+    border-color: transparent;
+    }
+  html[data-theme="ios"] [data-slot="button"][data-variant="ghost"]:hover,
+  html[data-theme="ios"] [data-slot="button"][data-variant="outline"]:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+    }
+
+  html[data-theme="ios"] [data-slot="button"] {
+    transition: transform 160ms cubic-bezier(0.34, 1.56, 0.64, 1), background-color 160ms ease, opacity 160ms ease;
+    }
+  html[data-theme="ios"] [data-slot="button"]:active:not(:disabled) {
     transform: scale(0.96);
+    }
+
+  html[data-theme="ios"] header a[class*="border-hairline"],
+  html[data-theme="ios"] nav a[class*="border-hairline"] {
+    border-color: transparent;
     }
 }
 
