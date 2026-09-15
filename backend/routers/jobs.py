@@ -24,6 +24,7 @@ def _with_cost(doc: dict) -> TakeoffLine:
     doc["cost"] = line_cost(doc)
     return TakeoffLine(**doc)
 
+
 async def _profile_for_job(job: dict, user: dict) -> dict:
     """The merged wizard profile for this job — account defaults + per-job overrides.
 
@@ -32,7 +33,6 @@ async def _profile_for_job(job: dict, user: dict) -> dict:
     """
     settings = await db.settings.find_one({"user_id": account_id(user)}, {"_id": 0}) or {}
     return _merge_profile(settings.get("wizard_profile") or {}, job.get("overrides") or {})
-
 
 
 async def _job_or_404(job_id: str, user_id: str) -> dict:
@@ -180,17 +180,18 @@ async def upload_blueprint(request: Request, job_id: str, file: UploadFile = Fil
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Could not read that PDF: {exc}") from exc
 
-settings = await db.settings.find_one({"user_id": account_id(user)}, {"_id": 0}) or {}
-labor_rate = float(settings.get("labor_rate", 58.0))
-# Merged wizard profile — drives rate, waste, scope, adhesive, and transition rules.
-profile = await _profile_for_job(job, user)
+    settings = await db.settings.find_one({"user_id": account_id(user)}, {"_id": 0}) or {}
+    labor_rate = float(settings.get("labor_rate", 58.0))
+    # Merged wizard profile — drives rate, waste, scope, adhesive, and transition rules.
+    profile = await _profile_for_job(job, user)
 
     await db.takeoff_lines.delete_many({"job_id": job_id})
     waste_overrides = {k: float(v) for k, v in (settings.get("waste_overrides") or {}).items()}
     lines = [build_line(r, job_id, labor_rate, waste_overrides, profile=profile) for r in result["lines"]]
     if job_specs:
-    for line in lines:
-        line.update(apply_specs_to_line(line, job_specs, profile=profile))
+        for line in lines:
+            line.update(apply_specs_to_line(line, job_specs, profile=profile))
+
     # Doors become transition strips, stair treads become nosings — counted, then priced.
     # A saved accessory product wins on name and price, so trim lands named the way this
     # contractor buys it; spec-sheet trim schedules fill in anything the drawings did not count.
