@@ -14,9 +14,11 @@ from lib.db import db
 from lib.flooring import TAX_TABLE, detect_tax
 from lib.pdf import quote_pdf
 from lib.pricing import (
-    BILLING_TERMS, CAP_CHANGE_ORDER, CAP_COSTING, CAP_EXPORT, CAP_INVOICE, CAP_QUOTE, CAP_SPEC,
-    COMPETITORS, COST_BREAKDOWN, OVERAGE_PER_PAGE, PAGE_COST, PLANS as PLAN_DICTS, TARGET_MARGIN,
-    TOP_UPS, cap_label, early_exit_invoice, has_cap, plan_for, upgrade_message,
+    BILLING_TERMS, CAP_BRANDING, CAP_CHANGE_ORDER, CAP_COSTING, CAP_EXPORT,
+    CAP_INVOICE, CAP_QUOTE, CAP_SPEC,
+    COST_BREAKDOWN, COMPETITORS, PAGE_COST, TARGET_MARGIN,
+    PLANS as PLAN_DICTS, TOP_UPS,
+    cap_label, early_exit_invoice, has_cap, overage_cost, plan_for, upgrade_message,
 )
 from models.billing import (
     BillingTerms, CancelOut, CancelPreview, CompetitorRow, CostLine, CostModel, CostingOverview,
@@ -58,7 +60,7 @@ def _email_footer(company: dict, lead: str) -> str:
 async def _company(user: dict) -> dict:
     s = await db.settings.find_one({"user_id": account_id(user)}, {"_id": 0}) or {}
     return {
-        "name": s.get("company_name") or user.get("company") or "Gridline",
+        "name": s.get("company_name") or user.get("company") or "Gridreader",
         "email": s.get("company_email") or user.get("email", ""),
         "currency": s.get("currency", "USD"),
         "template": s.get("pdf_template", "contractor_clean"),
@@ -89,8 +91,9 @@ async def put_settings(body: SettingsIn, user: dict = Depends(require("settings:
 
 @router.post("/settings/logo", response_model=Settings)
 async def upload_logo(file: UploadFile = File(...), user: dict = Depends(require("settings:write"))):
-    """Store the company logo inline (data URI) so every PDF and email carries it without
-    depending on an external host."""
+    """Store the company logo inline (data URI) so every PDF and email carries it.
+    Gated behind CAP_BRANDING — Trial and Starter plans get no custom logo."""
+    await _needs(user, CAP_BRANDING)
     raw = await file.read()
     if len(raw) > 1_500_000:
         raise HTTPException(status_code=400, detail="Logo must be under 1.5 MB")
@@ -106,6 +109,7 @@ async def upload_logo(file: UploadFile = File(...), user: dict = Depends(require
 
 @router.delete("/settings/logo", response_model=Settings)
 async def delete_logo(user: dict = Depends(require("settings:write"))):
+    await _needs(user, CAP_BRANDING)
     await db.settings.update_one({"user_id": account_id(user)}, {"$set": {"logo_data": ""}}, upsert=True)
     doc = await db.settings.find_one({"user_id": account_id(user)}, {"_id": 0}) or {}
     return Settings(**doc)
@@ -163,8 +167,6 @@ async def create_quote(job_id: str, body: QuoteIn, user: dict = Depends(require(
     if prior:
         await db.quotes.update_many({"job_id": job_id}, {"$set": {"status": "superseded"}})
 
-    # Mongo injects `_id` into the dicts it inserts, including nested ones — strip it or the
-    # snapshot cannot be serialised back out.
     snapshot = [{k: v for k, v in line.items() if k != "_id"} | {"cost": line_cost(line)}
                 for line in approved]
     quote = Quote(
@@ -187,6 +189,7 @@ async def _quote_or_404(quote_id: str, user_id: str) -> dict:
 
 @router.post("/quotes/{quote_id}/send", response_model=SendOut)
 async def send_quote(quote_id: str, user: dict = Depends(require("quote:write"))):
+    await _needs(user, CAP_QUOTE)
     q = await _quote_or_404(quote_id, account_id(user))
     job = await db.jobs.find_one({"id": q["job_id"]}, {"_id": 0}) or {}
     to = job.get("client_email") or user["email"]
@@ -215,8 +218,6 @@ async def send_quote(quote_id: str, user: dict = Depends(require("quote:write"))
 
 
 def _rate_from(doc: dict) -> tuple[float, float]:
-    """Recover the discount % and tax % a document was built with, so a retyped line
-    re-totals exactly the way the original did."""
     subtotal = float(doc.get("subtotal") or 0)
     discount_amount = float(doc.get("discount_amount") or 0)
     discount_pct = float(doc.get("discount_pct", discount_amount / subtotal * 100 if subtotal else 0))
@@ -243,11 +244,6 @@ def _edit_doc_line(doc: dict, line_id: str, body: DocLineUpdate) -> dict:
 @router.patch("/quotes/{quote_id}/lines/{line_id}", response_model=Quote)
 async def edit_quote_line(quote_id: str, line_id: str, body: DocLineUpdate,
                           user: dict = Depends(require("quote:write"))):
-    """Retype a product name or price directly on a quote — even one already sent.
-
-    History is preserved: a superseded revision is read-only, so corrections always land on
-    the live revision and every earlier version keeps its own numbers.
-    """
     q = await _quote_or_404(quote_id, account_id(user))
     if q.get("status") == "superseded":
         raise HTTPException(status_code=400, detail=(
@@ -260,7 +256,6 @@ async def edit_quote_line(quote_id: str, line_id: str, body: DocLineUpdate,
 @router.patch("/invoices/{invoice_id}/lines/{line_id}", response_model=Invoice)
 async def edit_invoice_line(invoice_id: str, line_id: str, body: DocLineUpdate,
                             user: dict = Depends(require("invoice:write"))):
-    """Retype a product name or price on an unpaid invoice and re-total it."""
     inv = await _invoice_or_404(invoice_id, account_id(user))
     if inv.get("status") == "paid":
         raise HTTPException(status_code=400, detail=(
@@ -318,6 +313,7 @@ async def _invoice_or_404(invoice_id: str, user_id: str) -> dict:
 
 @router.post("/invoices/{invoice_id}/send", response_model=SendOut)
 async def send_invoice(invoice_id: str, user: dict = Depends(require("invoice:write"))):
+    await _needs(user, CAP_INVOICE)
     inv = await _invoice_or_404(invoice_id, account_id(user))
     to = inv.get("client_email") or user["email"]
     company = await _company(user)
@@ -364,8 +360,6 @@ async def pay_invoice(invoice_id: str, user: dict = Depends(require("invoice:wri
 
 @router.post("/invoices/{invoice_id}/checkout", response_model=PayIntent)
 async def invoice_checkout(invoice_id: str, user: dict = Depends(require("invoice:write"))):
-    """Creates the hosted-payment link the client follows. Stripe is DUMMY in this build:
-    the link points at Gridline's own /pay/{token} page instead of checkout.stripe.com."""
     inv = await _invoice_or_404(invoice_id, account_id(user))
     token = inv.get("pay_token") or uuid.uuid4().hex
     if not inv.get("pay_token"):
@@ -375,9 +369,6 @@ async def invoice_checkout(invoice_id: str, user: dict = Depends(require("invoic
                      amount=float(inv["total"]), mocked=True)
 
 
-# The two routes below are intentionally UNAUTHENTICATED: the client paying the invoice
-# is not a Gridline user. The opaque pay_token is the only thing that grants access, and
-# it exposes just the amounts needed to pay.
 @router.get("/pay/{pay_token}", response_model=PublicInvoice)
 async def public_invoice(pay_token: str):
     inv = await db.invoices.find_one({"pay_token": pay_token}, {"_id": 0})
@@ -386,15 +377,11 @@ async def public_invoice(pay_token: str):
     settings = await db.settings.find_one({"user_id": inv["user_id"]}, {"_id": 0}) or {}
     return PublicInvoice(
         number=inv["number"], job_name=inv.get("job_name", ""),
-        company_name=settings.get("company_name") or "Gridline",
+        company_name=settings.get("company_name") or "Gridreader",
         client_name=inv.get("client_name", ""), status=inv["status"], subtotal=inv["subtotal"],
         discount_amount=inv["discount_amount"], tax_label=inv["tax_label"],
         tax_amount=inv["tax_amount"], total=inv["total"],
     )
-
-
-# The old dummy "mark it paid" endpoint is gone: client payments now go through real
-# Stripe Checkout at POST /api/pay/{token}/checkout (routers/payments.py).
 
 
 @router.post("/leads", response_model=Lead)
@@ -407,6 +394,7 @@ async def create_lead(body: LeadIn):
 # ---------- bid vs actual job costing ----------
 @router.get("/jobs/{job_id}/costing", response_model=JobCosting)
 async def job_costing(job_id: str, user: dict = Depends(require("job:read"))):
+    await _needs(user, CAP_COSTING)
     acct = account_id(user)
     job = await db.jobs.find_one({"id": job_id, "user_id": acct}, {"_id": 0})
     if not job:
@@ -441,7 +429,6 @@ async def job_costing(job_id: str, user: dict = Depends(require("job:read"))):
     )
 
 
-# ---------- bid vs actual across every job, worst variance first ----------
 @router.get("/costing/overview", response_model=CostingOverview)
 async def costing_overview(user: dict = Depends(require("job:read"))):
     await _needs(user, CAP_COSTING)
@@ -494,11 +481,10 @@ async def costing_overview(user: dict = Depends(require("job:read"))):
     )
 
 
-# ---------- CSV export for the bookkeeper ----------
 def _csv(rows: list[list[str]]) -> Response:
     body = "\n".join(",".join('"' + str(c).replace('"', '""') + '"' for c in r) for r in rows)
     return Response(content=body, media_type="text/csv",
-                    headers={"Content-Disposition": 'attachment; filename="gridline-export.csv"'})
+                    headers={"Content-Disposition": 'attachment; filename="gridreader-export.csv"'})
 
 
 @router.get("/export/invoices.csv")
@@ -530,7 +516,6 @@ async def export_expenses(user: dict = Depends(require("export:read"))):
     return _csv(rows)
 
 
-# ---------- expenses & profit ----------
 @router.get("/expenses", response_model=list[Expense])
 async def list_expenses(user: dict = Depends(require("expense:read"))):
     docs = await db.expenses.find({"user_id": account_id(user)}, {"_id": 0}).sort("date", -1).to_list(1000)
@@ -594,7 +579,7 @@ async def dashboard_stats(user: dict = Depends(require("job:read"))):
                           paid_this_month=round(paid_month, 2), sqft_measured=round(sqft, 1))
 
 
-# ---------- billing: plans, real usage against the plan's caps, unit-cost transparency ----------
+# ---------- billing ----------
 @router.get("/billing/plans", response_model=list[PlanTier])
 async def billing_plans():
     return [PlanTier(**p) for p in PLAN_DICTS]
@@ -602,9 +587,8 @@ async def billing_plans():
 
 @router.get("/billing/cost-model", response_model=CostModel)
 async def billing_cost_model():
-    """What a page actually costs us, published so the pricing is defensible."""
     return CostModel(
-        page_cost=PAGE_COST, target_margin=TARGET_MARGIN, overage_per_page=OVERAGE_PER_PAGE,
+        page_cost=PAGE_COST, target_margin=TARGET_MARGIN, overage_per_page=0.0,
         breakdown=[CostLine(**c) for c in COST_BREAKDOWN],
         competitors=[CompetitorRow(**c) for c in COMPETITORS],
     )
@@ -616,7 +600,6 @@ async def billing_usage(user: dict = Depends(require("settings:read"))):
     doc = await _account_doc(user)
     plan = plan_for(doc.get("plan"))
     start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    # One-off plans count for the life of the purchase; subscriptions reset each month.
     since = {"$gte": start} if plan["kind"] in ("subscription", "trial") else {"$gte": datetime(2000, 1, 1)}
     jobs = await db.jobs.find({"user_id": acct, "created_at": since},
                               {"_id": 0, "pages": 1, "pages_read": 1}).to_list(2000)
@@ -626,6 +609,7 @@ async def billing_usage(user: dict = Depends(require("settings:read"))):
     credits = int(doc.get("page_credits", 0))
     total_allow = included + credits if included >= 0 else -1
     remaining = max(0, total_allow - pages) if total_allow >= 0 else -1
+    overage = max(0, pages - total_allow) if total_allow >= 0 else 0
     return Usage(
         plan_id=plan["id"], plan_name=plan["name"], period=doc.get("plan_period", "annual"),
         pages_included=included, page_credits=credits, pages_used=pages,
@@ -633,15 +617,15 @@ async def billing_usage(user: dict = Depends(require("settings:read"))):
         limit_reached=total_allow >= 0 and pages >= total_allow,
         near_limit=total_allow > 0 and pages >= total_allow * 0.8,
         jobs_included=plan["jobs_included"],
-        jobs_used=len(jobs), max_file_mb=plan["max_file_mb"], overage_pages=0,
-        overage_cost=0.0,
+        jobs_used=len(jobs), max_file_mb=plan["max_file_mb"],
+        overage_pages=overage,
+        overage_cost=overage_cost(plan["id"], overage),
         capabilities=plan["capabilities"], seat_count=plan["seat_count"], seats_used=seats,
         plan_kind=plan["kind"], **_trial_window(doc, plan),
     )
 
 
 def _trial_window(account: dict, plan: dict) -> dict:
-    """Days left on the 14-day trial, counted from when the account (or trial) started."""
     if plan["kind"] != "trial":
         return {"trial_days_left": 0, "trial_ends_on": ""}
     started = account.get("plan_started_at") or account.get("created_at") or datetime.now(timezone.utc)
@@ -656,7 +640,6 @@ def _trial_window(account: dict, plan: dict) -> dict:
 
 @router.get("/billing/terms", response_model=BillingTerms)
 async def billing_terms():
-    """Commitment, cancellation and data-retention terms shown under the pricing toggle."""
     return BillingTerms(**BILLING_TERMS)
 
 
@@ -700,7 +683,6 @@ async def billing_cancel_preview(user: dict = Depends(require("billing:write")))
 
 @router.post("/billing/cancel", response_model=CancelOut)
 async def billing_cancel(user: dict = Depends(require("billing:write"))):
-    """Stop billing now. An annual commitment raises exactly one closing invoice first."""
     pre = await _cancel_preview(user)
     if pre.plan_id == "trial":
         raise HTTPException(status_code=400, detail="You are on the free trial — there is nothing to cancel.")
@@ -728,7 +710,6 @@ async def billing_cancel(user: dict = Depends(require("billing:write"))):
 
 @router.get("/billing/exit-fee", response_model=ExitFee)
 async def billing_exit_fee(user: dict = Depends(require("billing:write"))):
-    """The outstanding closing invoice, if the account left an annual commitment early."""
     doc = await db.exit_invoices.find_one({"user_id": account_id(user), "status": "unpaid"},
                                          {"_id": 0}, sort=[("created_at", -1)])
     if not doc:
@@ -741,7 +722,6 @@ async def billing_exit_fee(user: dict = Depends(require("billing:write"))):
 
 @router.get("/billing/downgrade-impact", response_model=DowngradeImpact)
 async def billing_downgrade_impact(plan_id: str, user: dict = Depends(require("billing:write"))):
-    """What an account loses by moving to `plan_id` — shown before the checkout is started."""
     acct = account_id(user)
     current = plan_for((await _account_doc(user)).get("plan"))
     target = plan_for(plan_id)
@@ -755,18 +735,19 @@ async def billing_downgrade_impact(plan_id: str, user: dict = Depends(require("b
         warnings.append(f"{unpaid} unpaid invoice(s) stay viewable and payable by your client, but you "
                         f"will not be able to raise or email a NEW invoice on {target['name']}.")
     elif CAP_INVOICE in lost:
-        warnings.append(f"Invoicing and card collection are not part of {target['name']} — accepted "
-                        f"quotes can no longer be converted into an invoice.")
+        warnings.append(f"Invoicing and card collection are not part of {target['name']}.")
     if CAP_SPEC in lost and with_specs:
-        warnings.append(f"{with_specs} job(s) were priced from a spec sheet. Those products stay on the "
-                        f"lines, but spec-sheet reading and automatic product transfer switch off.")
+        warnings.append(f"{with_specs} job(s) were priced from a spec sheet. Products stay on the lines, "
+                        f"but spec-sheet reading and automatic product transfer switch off.")
     elif CAP_SPEC in lost:
-        warnings.append("Spec-sheet reading with automatic product transfer is Unlimited Pro only.")
+        warnings.append("Spec-sheet reading with automatic product transfer is Pro and above.")
     if CAP_QUOTE in lost and open_quotes:
         warnings.append(f"{open_quotes} open quote(s) stay on record and exportable, but new quotes "
                         f"cannot be created on {target['name']}.")
     if CAP_CHANGE_ORDER in lost:
         warnings.append("Change-order revisions and their diff PDFs switch off.")
+    if CAP_BRANDING in lost:
+        warnings.append("Custom logo and branded PDF headers switch off.")
     if CAP_COSTING in lost:
         warnings.append("Bid vs actual job costing and the expense log switch off.")
     if CAP_EXPORT in lost:
@@ -789,14 +770,12 @@ async def billing_downgrade_impact(plan_id: str, user: dict = Depends(require("b
 
 @router.get("/billing/top-ups", response_model=list[TopUpPack])
 async def billing_top_ups():
-    """One-off page packs — bought only when a set overruns, never auto-renewed."""
     return [TopUpPack(**t) for t in TOP_UPS]
 
 
 @router.patch("/me/theme", response_model=ThemeIn)
 async def set_theme(body: ThemeIn, user: dict = Depends(current_user)):
-    """Theme is stored on the user so it follows them onto any device."""
-    if body.theme not in ("readout", "blueprint", "daylight"):
+    if body.theme not in ("readout", "ios", "daylight"):
         raise HTTPException(status_code=400, detail="Unknown theme")
     await db.users.update_one({"id": user["id"]}, {"$set": {"theme": body.theme}})
     return ThemeIn(theme=body.theme)
@@ -804,7 +783,6 @@ async def set_theme(body: ThemeIn, user: dict = Depends(current_user)):
 
 @router.post("/billing/checkout", response_model=CheckoutOut)
 async def billing_checkout(body: CheckoutIn, user: dict = Depends(require("billing:write"))):
-    """Kept for the free trial only — a real card goes through POST /api/payments/checkout."""
     plan = next((p for p in PLAN_DICTS if p["id"] == body.plan_id), None)
     if not plan:
         raise HTTPException(status_code=404, detail="Unknown plan")
@@ -815,7 +793,6 @@ async def billing_checkout(body: CheckoutIn, user: dict = Depends(require("billi
                        message=f"{plan['name']} activated.")
 
 
-# ---------- lead inbox (owner only) ----------
 @router.get("/leads", response_model=list[Lead])
 async def list_leads(user: dict = Depends(require("team:write"))):
     docs = await db.leads.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
